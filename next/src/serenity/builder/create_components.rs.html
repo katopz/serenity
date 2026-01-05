@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/builder/create_components.rs`."><title>create_components.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-2eb46af5.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="serenity" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.0-nightly (fcd630976 2026-01-01)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">serenity/builder/</div>create_components.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::borrow::Cow;
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/builder/create_components.rs`."><title>create_components.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-2eb46af5.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="serenity" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.0-nightly (e29fcf45e 2026-01-04)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">serenity/builder/</div>create_components.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::borrow::Cow;
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>serde::Serialize;
 <a href=#4 id=4 data-nosnippet>4</a>
@@ -881,196 +881,205 @@
 <a href=#881 id=881 data-nosnippet>881</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
 <a href=#882 id=882 data-nosnippet>882</a>    </span>max_values: <span class="prelude-ty">Option</span>&lt;u8&gt;,
 <a href=#883 id=883 data-nosnippet>883</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#884 id=884 data-nosnippet>884</a>    </span>disabled: <span class="prelude-ty">Option</span>&lt;bool&gt;,
-<a href=#885 id=885 data-nosnippet>885</a>
-<a href=#886 id=886 data-nosnippet>886</a>    <span class="attr">#[serde(flatten)]
-<a href=#887 id=887 data-nosnippet>887</a>    </span>kind: CreateSelectMenuKind&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#888 id=888 data-nosnippet>888</a>}
-<a href=#889 id=889 data-nosnippet>889</a>
-<a href=#890 id=890 data-nosnippet>890</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; CreateSelectMenu&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#891 id=891 data-nosnippet>891</a>    <span class="doccomment">/// Creates a builder with given custom id (a developer-defined identifier), and a list of
-<a href=#892 id=892 data-nosnippet>892</a>    /// options, leaving all other fields empty.
-<a href=#893 id=893 data-nosnippet>893</a>    </span><span class="kw">pub fn </span>new(custom_id: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;, kind: CreateSelectMenuKind&lt;<span class="lifetime">'a</span>&gt;) -&gt; <span class="self">Self </span>{
-<a href=#894 id=894 data-nosnippet>894</a>        <span class="self">Self </span>{
-<a href=#895 id=895 data-nosnippet>895</a>            custom_id: custom_id.into(),
-<a href=#896 id=896 data-nosnippet>896</a>            placeholder: <span class="prelude-val">None</span>,
-<a href=#897 id=897 data-nosnippet>897</a>            min_values: <span class="prelude-val">None</span>,
-<a href=#898 id=898 data-nosnippet>898</a>            max_values: <span class="prelude-val">None</span>,
-<a href=#899 id=899 data-nosnippet>899</a>            disabled: <span class="prelude-val">None</span>,
-<a href=#900 id=900 data-nosnippet>900</a>            kind,
-<a href=#901 id=901 data-nosnippet>901</a>        }
-<a href=#902 id=902 data-nosnippet>902</a>    }
-<a href=#903 id=903 data-nosnippet>903</a>
-<a href=#904 id=904 data-nosnippet>904</a>    <span class="doccomment">/// The placeholder of the select menu.
-<a href=#905 id=905 data-nosnippet>905</a>    </span><span class="kw">pub fn </span>placeholder(<span class="kw-2">mut </span><span class="self">self</span>, label: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#906 id=906 data-nosnippet>906</a>        <span class="self">self</span>.placeholder = <span class="prelude-val">Some</span>(label.into());
-<a href=#907 id=907 data-nosnippet>907</a>        <span class="self">self
-<a href=#908 id=908 data-nosnippet>908</a>    </span>}
-<a href=#909 id=909 data-nosnippet>909</a>
-<a href=#910 id=910 data-nosnippet>910</a>    <span class="doccomment">/// Sets the custom id of the select menu, a developer-defined identifier. Replaces the current
-<a href=#911 id=911 data-nosnippet>911</a>    /// value as set in [`Self::new`].
-<a href=#912 id=912 data-nosnippet>912</a>    </span><span class="kw">pub fn </span>custom_id(<span class="kw-2">mut </span><span class="self">self</span>, id: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#913 id=913 data-nosnippet>913</a>        <span class="self">self</span>.custom_id = id.into();
-<a href=#914 id=914 data-nosnippet>914</a>        <span class="self">self
-<a href=#915 id=915 data-nosnippet>915</a>    </span>}
-<a href=#916 id=916 data-nosnippet>916</a>
-<a href=#917 id=917 data-nosnippet>917</a>    <span class="doccomment">/// Sets the minimum values for the user to select.
-<a href=#918 id=918 data-nosnippet>918</a>    </span><span class="kw">pub fn </span>min_values(<span class="kw-2">mut </span><span class="self">self</span>, min: u8) -&gt; <span class="self">Self </span>{
-<a href=#919 id=919 data-nosnippet>919</a>        <span class="self">self</span>.min_values = <span class="prelude-val">Some</span>(min);
-<a href=#920 id=920 data-nosnippet>920</a>        <span class="self">self
-<a href=#921 id=921 data-nosnippet>921</a>    </span>}
-<a href=#922 id=922 data-nosnippet>922</a>
-<a href=#923 id=923 data-nosnippet>923</a>    <span class="doccomment">/// Sets the maximum values for the user to select.
-<a href=#924 id=924 data-nosnippet>924</a>    </span><span class="kw">pub fn </span>max_values(<span class="kw-2">mut </span><span class="self">self</span>, max: u8) -&gt; <span class="self">Self </span>{
-<a href=#925 id=925 data-nosnippet>925</a>        <span class="self">self</span>.max_values = <span class="prelude-val">Some</span>(max);
-<a href=#926 id=926 data-nosnippet>926</a>        <span class="self">self
-<a href=#927 id=927 data-nosnippet>927</a>    </span>}
-<a href=#928 id=928 data-nosnippet>928</a>
-<a href=#929 id=929 data-nosnippet>929</a>    <span class="doccomment">/// Sets the disabled state for the button.
-<a href=#930 id=930 data-nosnippet>930</a>    </span><span class="kw">pub fn </span>disabled(<span class="kw-2">mut </span><span class="self">self</span>, disabled: bool) -&gt; <span class="self">Self </span>{
-<a href=#931 id=931 data-nosnippet>931</a>        <span class="self">self</span>.disabled = <span class="prelude-val">Some</span>(disabled);
-<a href=#932 id=932 data-nosnippet>932</a>        <span class="self">self
-<a href=#933 id=933 data-nosnippet>933</a>    </span>}
-<a href=#934 id=934 data-nosnippet>934</a>}
-<a href=#935 id=935 data-nosnippet>935</a>
-<a href=#936 id=936 data-nosnippet>936</a><span class="doccomment">/// A builder for creating an option of a select menu component in a message
-<a href=#937 id=937 data-nosnippet>937</a>///
-<a href=#938 id=938 data-nosnippet>938</a>/// [Discord docs](https://discord.com/developers/docs/components/reference#string-select-select-option-structure)
-<a href=#939 id=939 data-nosnippet>939</a></span><span class="attr">#[derive(Clone, Debug, Serialize)]
-<a href=#940 id=940 data-nosnippet>940</a>#[must_use]
-<a href=#941 id=941 data-nosnippet>941</a></span><span class="kw">pub struct </span>CreateSelectMenuOption&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#942 id=942 data-nosnippet>942</a>    label: Cow&lt;<span class="lifetime">'a</span>, str&gt;,
-<a href=#943 id=943 data-nosnippet>943</a>    value: Cow&lt;<span class="lifetime">'a</span>, str&gt;,
-<a href=#944 id=944 data-nosnippet>944</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#945 id=945 data-nosnippet>945</a>    </span>description: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;,
-<a href=#946 id=946 data-nosnippet>946</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#947 id=947 data-nosnippet>947</a>    </span>emoji: <span class="prelude-ty">Option</span>&lt;ReactionType&gt;,
-<a href=#948 id=948 data-nosnippet>948</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#949 id=949 data-nosnippet>949</a>    </span>default: <span class="prelude-ty">Option</span>&lt;bool&gt;,
-<a href=#950 id=950 data-nosnippet>950</a>}
-<a href=#951 id=951 data-nosnippet>951</a>
-<a href=#952 id=952 data-nosnippet>952</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; CreateSelectMenuOption&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#953 id=953 data-nosnippet>953</a>    <span class="doccomment">/// Creates a select menu option with the given label and value, leaving all other fields
-<a href=#954 id=954 data-nosnippet>954</a>    /// empty.
-<a href=#955 id=955 data-nosnippet>955</a>    </span><span class="kw">pub fn </span>new(label: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;, value: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#956 id=956 data-nosnippet>956</a>        <span class="self">Self </span>{
-<a href=#957 id=957 data-nosnippet>957</a>            label: label.into(),
-<a href=#958 id=958 data-nosnippet>958</a>            value: value.into(),
-<a href=#959 id=959 data-nosnippet>959</a>            description: <span class="prelude-val">None</span>,
-<a href=#960 id=960 data-nosnippet>960</a>            emoji: <span class="prelude-val">None</span>,
-<a href=#961 id=961 data-nosnippet>961</a>            default: <span class="prelude-val">None</span>,
-<a href=#962 id=962 data-nosnippet>962</a>        }
-<a href=#963 id=963 data-nosnippet>963</a>    }
-<a href=#964 id=964 data-nosnippet>964</a>
-<a href=#965 id=965 data-nosnippet>965</a>    <span class="doccomment">/// Sets the label of this option, replacing the current value as set in [`Self::new`].
-<a href=#966 id=966 data-nosnippet>966</a>    </span><span class="kw">pub fn </span>label(<span class="kw-2">mut </span><span class="self">self</span>, label: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#967 id=967 data-nosnippet>967</a>        <span class="self">self</span>.label = label.into();
-<a href=#968 id=968 data-nosnippet>968</a>        <span class="self">self
-<a href=#969 id=969 data-nosnippet>969</a>    </span>}
-<a href=#970 id=970 data-nosnippet>970</a>
-<a href=#971 id=971 data-nosnippet>971</a>    <span class="doccomment">/// Sets the value of this option, replacing the current value as set in [`Self::new`].
-<a href=#972 id=972 data-nosnippet>972</a>    </span><span class="kw">pub fn </span>value(<span class="kw-2">mut </span><span class="self">self</span>, value: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#973 id=973 data-nosnippet>973</a>        <span class="self">self</span>.value = value.into();
-<a href=#974 id=974 data-nosnippet>974</a>        <span class="self">self
-<a href=#975 id=975 data-nosnippet>975</a>    </span>}
-<a href=#976 id=976 data-nosnippet>976</a>
-<a href=#977 id=977 data-nosnippet>977</a>    <span class="doccomment">/// Sets the description shown on this option.
-<a href=#978 id=978 data-nosnippet>978</a>    </span><span class="kw">pub fn </span>description(<span class="kw-2">mut </span><span class="self">self</span>, description: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#979 id=979 data-nosnippet>979</a>        <span class="self">self</span>.description = <span class="prelude-val">Some</span>(description.into());
-<a href=#980 id=980 data-nosnippet>980</a>        <span class="self">self
-<a href=#981 id=981 data-nosnippet>981</a>    </span>}
-<a href=#982 id=982 data-nosnippet>982</a>
-<a href=#983 id=983 data-nosnippet>983</a>    <span class="doccomment">/// Sets emoji of the option.
-<a href=#984 id=984 data-nosnippet>984</a>    </span><span class="kw">pub fn </span>emoji(<span class="kw-2">mut </span><span class="self">self</span>, emoji: <span class="kw">impl </span>Into&lt;ReactionType&gt;) -&gt; <span class="self">Self </span>{
-<a href=#985 id=985 data-nosnippet>985</a>        <span class="self">self</span>.emoji = <span class="prelude-val">Some</span>(emoji.into());
-<a href=#986 id=986 data-nosnippet>986</a>        <span class="self">self
-<a href=#987 id=987 data-nosnippet>987</a>    </span>}
-<a href=#988 id=988 data-nosnippet>988</a>
-<a href=#989 id=989 data-nosnippet>989</a>    <span class="doccomment">/// Sets this option as selected by default.
-<a href=#990 id=990 data-nosnippet>990</a>    </span><span class="kw">pub fn </span>default_selection(<span class="kw-2">mut </span><span class="self">self</span>, default: bool) -&gt; <span class="self">Self </span>{
-<a href=#991 id=991 data-nosnippet>991</a>        <span class="self">self</span>.default = <span class="prelude-val">Some</span>(default);
-<a href=#992 id=992 data-nosnippet>992</a>        <span class="self">self
-<a href=#993 id=993 data-nosnippet>993</a>    </span>}
-<a href=#994 id=994 data-nosnippet>994</a>}
-<a href=#995 id=995 data-nosnippet>995</a>
-<a href=#996 id=996 data-nosnippet>996</a><span class="doccomment">/// A builder for creating an input text component in a modal
-<a href=#997 id=997 data-nosnippet>997</a>///
-<a href=#998 id=998 data-nosnippet>998</a>/// [Discord docs](https://discord.com/developers/docs/components/reference#text-input).
-<a href=#999 id=999 data-nosnippet>999</a></span><span class="attr">#[derive(Clone, Debug, Serialize)]
-<a href=#1000 id=1000 data-nosnippet>1000</a>#[must_use]
-<a href=#1001 id=1001 data-nosnippet>1001</a></span><span class="kw">pub struct </span>CreateInputText&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#1002 id=1002 data-nosnippet>1002</a>    <span class="attr">#[serde(rename = <span class="string">"type"</span>)]
-<a href=#1003 id=1003 data-nosnippet>1003</a>    </span>kind: ComponentType,
-<a href=#1004 id=1004 data-nosnippet>1004</a>    custom_id: Cow&lt;<span class="lifetime">'a</span>, str&gt;,
-<a href=#1005 id=1005 data-nosnippet>1005</a>    style: InputTextStyle,
-<a href=#1006 id=1006 data-nosnippet>1006</a>    min_length: <span class="prelude-ty">Option</span>&lt;u16&gt;,
-<a href=#1007 id=1007 data-nosnippet>1007</a>    max_length: <span class="prelude-ty">Option</span>&lt;u16&gt;,
-<a href=#1008 id=1008 data-nosnippet>1008</a>    required: bool,
-<a href=#1009 id=1009 data-nosnippet>1009</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#1010 id=1010 data-nosnippet>1010</a>    </span>value: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;,
-<a href=#1011 id=1011 data-nosnippet>1011</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#1012 id=1012 data-nosnippet>1012</a>    </span>placeholder: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;,
-<a href=#1013 id=1013 data-nosnippet>1013</a>}
-<a href=#1014 id=1014 data-nosnippet>1014</a>
-<a href=#1015 id=1015 data-nosnippet>1015</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; CreateInputText&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#1016 id=1016 data-nosnippet>1016</a>    <span class="doccomment">/// Creates a text input with the given style, label, and custom id (a developer-defined
-<a href=#1017 id=1017 data-nosnippet>1017</a>    /// identifier), leaving all other fields empty.
-<a href=#1018 id=1018 data-nosnippet>1018</a>    </span><span class="kw">pub fn </span>new(style: InputTextStyle, custom_id: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#1019 id=1019 data-nosnippet>1019</a>        <span class="self">Self </span>{
-<a href=#1020 id=1020 data-nosnippet>1020</a>            style,
-<a href=#1021 id=1021 data-nosnippet>1021</a>            custom_id: custom_id.into(),
-<a href=#1022 id=1022 data-nosnippet>1022</a>
-<a href=#1023 id=1023 data-nosnippet>1023</a>            placeholder: <span class="prelude-val">None</span>,
-<a href=#1024 id=1024 data-nosnippet>1024</a>            min_length: <span class="prelude-val">None</span>,
-<a href=#1025 id=1025 data-nosnippet>1025</a>            max_length: <span class="prelude-val">None</span>,
-<a href=#1026 id=1026 data-nosnippet>1026</a>            value: <span class="prelude-val">None</span>,
-<a href=#1027 id=1027 data-nosnippet>1027</a>            required: <span class="bool-val">true</span>,
-<a href=#1028 id=1028 data-nosnippet>1028</a>
-<a href=#1029 id=1029 data-nosnippet>1029</a>            kind: ComponentType::InputText,
-<a href=#1030 id=1030 data-nosnippet>1030</a>        }
-<a href=#1031 id=1031 data-nosnippet>1031</a>    }
-<a href=#1032 id=1032 data-nosnippet>1032</a>
-<a href=#1033 id=1033 data-nosnippet>1033</a>    <span class="doccomment">/// Sets the style of this input text. Replaces the current value as set in [`Self::new`].
-<a href=#1034 id=1034 data-nosnippet>1034</a>    </span><span class="kw">pub fn </span>style(<span class="kw-2">mut </span><span class="self">self</span>, kind: InputTextStyle) -&gt; <span class="self">Self </span>{
-<a href=#1035 id=1035 data-nosnippet>1035</a>        <span class="self">self</span>.style = kind;
-<a href=#1036 id=1036 data-nosnippet>1036</a>        <span class="self">self
-<a href=#1037 id=1037 data-nosnippet>1037</a>    </span>}
-<a href=#1038 id=1038 data-nosnippet>1038</a>
-<a href=#1039 id=1039 data-nosnippet>1039</a>    <span class="doccomment">/// Sets the custom id of the input text, a developer-defined identifier. Replaces the current
-<a href=#1040 id=1040 data-nosnippet>1040</a>    /// value as set in [`Self::new`].
-<a href=#1041 id=1041 data-nosnippet>1041</a>    </span><span class="kw">pub fn </span>custom_id(<span class="kw-2">mut </span><span class="self">self</span>, id: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#1042 id=1042 data-nosnippet>1042</a>        <span class="self">self</span>.custom_id = id.into();
-<a href=#1043 id=1043 data-nosnippet>1043</a>        <span class="self">self
-<a href=#1044 id=1044 data-nosnippet>1044</a>    </span>}
-<a href=#1045 id=1045 data-nosnippet>1045</a>
-<a href=#1046 id=1046 data-nosnippet>1046</a>    <span class="doccomment">/// Sets the placeholder of this input text.
-<a href=#1047 id=1047 data-nosnippet>1047</a>    </span><span class="kw">pub fn </span>placeholder(<span class="kw-2">mut </span><span class="self">self</span>, label: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#1048 id=1048 data-nosnippet>1048</a>        <span class="self">self</span>.placeholder = <span class="prelude-val">Some</span>(label.into());
-<a href=#1049 id=1049 data-nosnippet>1049</a>        <span class="self">self
-<a href=#1050 id=1050 data-nosnippet>1050</a>    </span>}
-<a href=#1051 id=1051 data-nosnippet>1051</a>
-<a href=#1052 id=1052 data-nosnippet>1052</a>    <span class="doccomment">/// Sets the minimum length required for the input text
-<a href=#1053 id=1053 data-nosnippet>1053</a>    </span><span class="kw">pub fn </span>min_length(<span class="kw-2">mut </span><span class="self">self</span>, min: u16) -&gt; <span class="self">Self </span>{
-<a href=#1054 id=1054 data-nosnippet>1054</a>        <span class="self">self</span>.min_length = <span class="prelude-val">Some</span>(min);
-<a href=#1055 id=1055 data-nosnippet>1055</a>        <span class="self">self
-<a href=#1056 id=1056 data-nosnippet>1056</a>    </span>}
-<a href=#1057 id=1057 data-nosnippet>1057</a>
-<a href=#1058 id=1058 data-nosnippet>1058</a>    <span class="doccomment">/// Sets the maximum length required for the input text
-<a href=#1059 id=1059 data-nosnippet>1059</a>    </span><span class="kw">pub fn </span>max_length(<span class="kw-2">mut </span><span class="self">self</span>, max: u16) -&gt; <span class="self">Self </span>{
-<a href=#1060 id=1060 data-nosnippet>1060</a>        <span class="self">self</span>.max_length = <span class="prelude-val">Some</span>(max);
-<a href=#1061 id=1061 data-nosnippet>1061</a>        <span class="self">self
-<a href=#1062 id=1062 data-nosnippet>1062</a>    </span>}
-<a href=#1063 id=1063 data-nosnippet>1063</a>
-<a href=#1064 id=1064 data-nosnippet>1064</a>    <span class="doccomment">/// Sets the value of this input text.
-<a href=#1065 id=1065 data-nosnippet>1065</a>    </span><span class="kw">pub fn </span>value(<span class="kw-2">mut </span><span class="self">self</span>, value: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
-<a href=#1066 id=1066 data-nosnippet>1066</a>        <span class="self">self</span>.value = <span class="prelude-val">Some</span>(value.into());
-<a href=#1067 id=1067 data-nosnippet>1067</a>        <span class="self">self
-<a href=#1068 id=1068 data-nosnippet>1068</a>    </span>}
-<a href=#1069 id=1069 data-nosnippet>1069</a>
-<a href=#1070 id=1070 data-nosnippet>1070</a>    <span class="doccomment">/// Sets if the input text is required
-<a href=#1071 id=1071 data-nosnippet>1071</a>    </span><span class="kw">pub fn </span>required(<span class="kw-2">mut </span><span class="self">self</span>, required: bool) -&gt; <span class="self">Self </span>{
-<a href=#1072 id=1072 data-nosnippet>1072</a>        <span class="self">self</span>.required = required;
-<a href=#1073 id=1073 data-nosnippet>1073</a>        <span class="self">self
-<a href=#1074 id=1074 data-nosnippet>1074</a>    </span>}
-<a href=#1075 id=1075 data-nosnippet>1075</a>}
+<a href=#884 id=884 data-nosnippet>884</a>    </span>required: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+<a href=#885 id=885 data-nosnippet>885</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#886 id=886 data-nosnippet>886</a>    </span>disabled: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+<a href=#887 id=887 data-nosnippet>887</a>
+<a href=#888 id=888 data-nosnippet>888</a>    <span class="attr">#[serde(flatten)]
+<a href=#889 id=889 data-nosnippet>889</a>    </span>kind: CreateSelectMenuKind&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#890 id=890 data-nosnippet>890</a>}
+<a href=#891 id=891 data-nosnippet>891</a>
+<a href=#892 id=892 data-nosnippet>892</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; CreateSelectMenu&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#893 id=893 data-nosnippet>893</a>    <span class="doccomment">/// Creates a builder with given custom id (a developer-defined identifier), and a list of
+<a href=#894 id=894 data-nosnippet>894</a>    /// options, leaving all other fields empty.
+<a href=#895 id=895 data-nosnippet>895</a>    </span><span class="kw">pub fn </span>new(custom_id: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;, kind: CreateSelectMenuKind&lt;<span class="lifetime">'a</span>&gt;) -&gt; <span class="self">Self </span>{
+<a href=#896 id=896 data-nosnippet>896</a>        <span class="self">Self </span>{
+<a href=#897 id=897 data-nosnippet>897</a>            custom_id: custom_id.into(),
+<a href=#898 id=898 data-nosnippet>898</a>            placeholder: <span class="prelude-val">None</span>,
+<a href=#899 id=899 data-nosnippet>899</a>            min_values: <span class="prelude-val">None</span>,
+<a href=#900 id=900 data-nosnippet>900</a>            max_values: <span class="prelude-val">None</span>,
+<a href=#901 id=901 data-nosnippet>901</a>            required: <span class="prelude-val">None</span>,
+<a href=#902 id=902 data-nosnippet>902</a>            disabled: <span class="prelude-val">None</span>,
+<a href=#903 id=903 data-nosnippet>903</a>            kind,
+<a href=#904 id=904 data-nosnippet>904</a>        }
+<a href=#905 id=905 data-nosnippet>905</a>    }
+<a href=#906 id=906 data-nosnippet>906</a>
+<a href=#907 id=907 data-nosnippet>907</a>    <span class="doccomment">/// The placeholder of the select menu.
+<a href=#908 id=908 data-nosnippet>908</a>    </span><span class="kw">pub fn </span>placeholder(<span class="kw-2">mut </span><span class="self">self</span>, label: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#909 id=909 data-nosnippet>909</a>        <span class="self">self</span>.placeholder = <span class="prelude-val">Some</span>(label.into());
+<a href=#910 id=910 data-nosnippet>910</a>        <span class="self">self
+<a href=#911 id=911 data-nosnippet>911</a>    </span>}
+<a href=#912 id=912 data-nosnippet>912</a>
+<a href=#913 id=913 data-nosnippet>913</a>    <span class="doccomment">/// Sets the custom id of the select menu, a developer-defined identifier. Replaces the current
+<a href=#914 id=914 data-nosnippet>914</a>    /// value as set in [`Self::new`].
+<a href=#915 id=915 data-nosnippet>915</a>    </span><span class="kw">pub fn </span>custom_id(<span class="kw-2">mut </span><span class="self">self</span>, id: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#916 id=916 data-nosnippet>916</a>        <span class="self">self</span>.custom_id = id.into();
+<a href=#917 id=917 data-nosnippet>917</a>        <span class="self">self
+<a href=#918 id=918 data-nosnippet>918</a>    </span>}
+<a href=#919 id=919 data-nosnippet>919</a>
+<a href=#920 id=920 data-nosnippet>920</a>    <span class="doccomment">/// Sets the minimum values for the user to select.
+<a href=#921 id=921 data-nosnippet>921</a>    </span><span class="kw">pub fn </span>min_values(<span class="kw-2">mut </span><span class="self">self</span>, min: u8) -&gt; <span class="self">Self </span>{
+<a href=#922 id=922 data-nosnippet>922</a>        <span class="self">self</span>.min_values = <span class="prelude-val">Some</span>(min);
+<a href=#923 id=923 data-nosnippet>923</a>        <span class="self">self
+<a href=#924 id=924 data-nosnippet>924</a>    </span>}
+<a href=#925 id=925 data-nosnippet>925</a>
+<a href=#926 id=926 data-nosnippet>926</a>    <span class="doccomment">/// Sets the maximum values for the user to select.
+<a href=#927 id=927 data-nosnippet>927</a>    </span><span class="kw">pub fn </span>max_values(<span class="kw-2">mut </span><span class="self">self</span>, max: u8) -&gt; <span class="self">Self </span>{
+<a href=#928 id=928 data-nosnippet>928</a>        <span class="self">self</span>.max_values = <span class="prelude-val">Some</span>(max);
+<a href=#929 id=929 data-nosnippet>929</a>        <span class="self">self
+<a href=#930 id=930 data-nosnippet>930</a>    </span>}
+<a href=#931 id=931 data-nosnippet>931</a>
+<a href=#932 id=932 data-nosnippet>932</a>    <span class="doccomment">/// Sets the required state for the select menu in modals. Ignored in messages.
+<a href=#933 id=933 data-nosnippet>933</a>    </span><span class="kw">pub fn </span>required(<span class="kw-2">mut </span><span class="self">self</span>, required: bool) -&gt; <span class="self">Self </span>{
+<a href=#934 id=934 data-nosnippet>934</a>        <span class="self">self</span>.required = <span class="prelude-val">Some</span>(required);
+<a href=#935 id=935 data-nosnippet>935</a>        <span class="self">self
+<a href=#936 id=936 data-nosnippet>936</a>    </span>}
+<a href=#937 id=937 data-nosnippet>937</a>
+<a href=#938 id=938 data-nosnippet>938</a>    <span class="doccomment">/// Sets the disabled state for the select menu.
+<a href=#939 id=939 data-nosnippet>939</a>    </span><span class="kw">pub fn </span>disabled(<span class="kw-2">mut </span><span class="self">self</span>, disabled: bool) -&gt; <span class="self">Self </span>{
+<a href=#940 id=940 data-nosnippet>940</a>        <span class="self">self</span>.disabled = <span class="prelude-val">Some</span>(disabled);
+<a href=#941 id=941 data-nosnippet>941</a>        <span class="self">self
+<a href=#942 id=942 data-nosnippet>942</a>    </span>}
+<a href=#943 id=943 data-nosnippet>943</a>}
+<a href=#944 id=944 data-nosnippet>944</a>
+<a href=#945 id=945 data-nosnippet>945</a><span class="doccomment">/// A builder for creating an option of a select menu component in a message
+<a href=#946 id=946 data-nosnippet>946</a>///
+<a href=#947 id=947 data-nosnippet>947</a>/// [Discord docs](https://discord.com/developers/docs/components/reference#string-select-select-option-structure)
+<a href=#948 id=948 data-nosnippet>948</a></span><span class="attr">#[derive(Clone, Debug, Serialize)]
+<a href=#949 id=949 data-nosnippet>949</a>#[must_use]
+<a href=#950 id=950 data-nosnippet>950</a></span><span class="kw">pub struct </span>CreateSelectMenuOption&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#951 id=951 data-nosnippet>951</a>    label: Cow&lt;<span class="lifetime">'a</span>, str&gt;,
+<a href=#952 id=952 data-nosnippet>952</a>    value: Cow&lt;<span class="lifetime">'a</span>, str&gt;,
+<a href=#953 id=953 data-nosnippet>953</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#954 id=954 data-nosnippet>954</a>    </span>description: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;,
+<a href=#955 id=955 data-nosnippet>955</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#956 id=956 data-nosnippet>956</a>    </span>emoji: <span class="prelude-ty">Option</span>&lt;ReactionType&gt;,
+<a href=#957 id=957 data-nosnippet>957</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#958 id=958 data-nosnippet>958</a>    </span>default: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+<a href=#959 id=959 data-nosnippet>959</a>}
+<a href=#960 id=960 data-nosnippet>960</a>
+<a href=#961 id=961 data-nosnippet>961</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; CreateSelectMenuOption&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#962 id=962 data-nosnippet>962</a>    <span class="doccomment">/// Creates a select menu option with the given label and value, leaving all other fields
+<a href=#963 id=963 data-nosnippet>963</a>    /// empty.
+<a href=#964 id=964 data-nosnippet>964</a>    </span><span class="kw">pub fn </span>new(label: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;, value: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#965 id=965 data-nosnippet>965</a>        <span class="self">Self </span>{
+<a href=#966 id=966 data-nosnippet>966</a>            label: label.into(),
+<a href=#967 id=967 data-nosnippet>967</a>            value: value.into(),
+<a href=#968 id=968 data-nosnippet>968</a>            description: <span class="prelude-val">None</span>,
+<a href=#969 id=969 data-nosnippet>969</a>            emoji: <span class="prelude-val">None</span>,
+<a href=#970 id=970 data-nosnippet>970</a>            default: <span class="prelude-val">None</span>,
+<a href=#971 id=971 data-nosnippet>971</a>        }
+<a href=#972 id=972 data-nosnippet>972</a>    }
+<a href=#973 id=973 data-nosnippet>973</a>
+<a href=#974 id=974 data-nosnippet>974</a>    <span class="doccomment">/// Sets the label of this option, replacing the current value as set in [`Self::new`].
+<a href=#975 id=975 data-nosnippet>975</a>    </span><span class="kw">pub fn </span>label(<span class="kw-2">mut </span><span class="self">self</span>, label: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#976 id=976 data-nosnippet>976</a>        <span class="self">self</span>.label = label.into();
+<a href=#977 id=977 data-nosnippet>977</a>        <span class="self">self
+<a href=#978 id=978 data-nosnippet>978</a>    </span>}
+<a href=#979 id=979 data-nosnippet>979</a>
+<a href=#980 id=980 data-nosnippet>980</a>    <span class="doccomment">/// Sets the value of this option, replacing the current value as set in [`Self::new`].
+<a href=#981 id=981 data-nosnippet>981</a>    </span><span class="kw">pub fn </span>value(<span class="kw-2">mut </span><span class="self">self</span>, value: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#982 id=982 data-nosnippet>982</a>        <span class="self">self</span>.value = value.into();
+<a href=#983 id=983 data-nosnippet>983</a>        <span class="self">self
+<a href=#984 id=984 data-nosnippet>984</a>    </span>}
+<a href=#985 id=985 data-nosnippet>985</a>
+<a href=#986 id=986 data-nosnippet>986</a>    <span class="doccomment">/// Sets the description shown on this option.
+<a href=#987 id=987 data-nosnippet>987</a>    </span><span class="kw">pub fn </span>description(<span class="kw-2">mut </span><span class="self">self</span>, description: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#988 id=988 data-nosnippet>988</a>        <span class="self">self</span>.description = <span class="prelude-val">Some</span>(description.into());
+<a href=#989 id=989 data-nosnippet>989</a>        <span class="self">self
+<a href=#990 id=990 data-nosnippet>990</a>    </span>}
+<a href=#991 id=991 data-nosnippet>991</a>
+<a href=#992 id=992 data-nosnippet>992</a>    <span class="doccomment">/// Sets emoji of the option.
+<a href=#993 id=993 data-nosnippet>993</a>    </span><span class="kw">pub fn </span>emoji(<span class="kw-2">mut </span><span class="self">self</span>, emoji: <span class="kw">impl </span>Into&lt;ReactionType&gt;) -&gt; <span class="self">Self </span>{
+<a href=#994 id=994 data-nosnippet>994</a>        <span class="self">self</span>.emoji = <span class="prelude-val">Some</span>(emoji.into());
+<a href=#995 id=995 data-nosnippet>995</a>        <span class="self">self
+<a href=#996 id=996 data-nosnippet>996</a>    </span>}
+<a href=#997 id=997 data-nosnippet>997</a>
+<a href=#998 id=998 data-nosnippet>998</a>    <span class="doccomment">/// Sets this option as selected by default.
+<a href=#999 id=999 data-nosnippet>999</a>    </span><span class="kw">pub fn </span>default_selection(<span class="kw-2">mut </span><span class="self">self</span>, default: bool) -&gt; <span class="self">Self </span>{
+<a href=#1000 id=1000 data-nosnippet>1000</a>        <span class="self">self</span>.default = <span class="prelude-val">Some</span>(default);
+<a href=#1001 id=1001 data-nosnippet>1001</a>        <span class="self">self
+<a href=#1002 id=1002 data-nosnippet>1002</a>    </span>}
+<a href=#1003 id=1003 data-nosnippet>1003</a>}
+<a href=#1004 id=1004 data-nosnippet>1004</a>
+<a href=#1005 id=1005 data-nosnippet>1005</a><span class="doccomment">/// A builder for creating an input text component in a modal
+<a href=#1006 id=1006 data-nosnippet>1006</a>///
+<a href=#1007 id=1007 data-nosnippet>1007</a>/// [Discord docs](https://discord.com/developers/docs/components/reference#text-input).
+<a href=#1008 id=1008 data-nosnippet>1008</a></span><span class="attr">#[derive(Clone, Debug, Serialize)]
+<a href=#1009 id=1009 data-nosnippet>1009</a>#[must_use]
+<a href=#1010 id=1010 data-nosnippet>1010</a></span><span class="kw">pub struct </span>CreateInputText&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#1011 id=1011 data-nosnippet>1011</a>    <span class="attr">#[serde(rename = <span class="string">"type"</span>)]
+<a href=#1012 id=1012 data-nosnippet>1012</a>    </span>kind: ComponentType,
+<a href=#1013 id=1013 data-nosnippet>1013</a>    custom_id: Cow&lt;<span class="lifetime">'a</span>, str&gt;,
+<a href=#1014 id=1014 data-nosnippet>1014</a>    style: InputTextStyle,
+<a href=#1015 id=1015 data-nosnippet>1015</a>    min_length: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+<a href=#1016 id=1016 data-nosnippet>1016</a>    max_length: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+<a href=#1017 id=1017 data-nosnippet>1017</a>    required: bool,
+<a href=#1018 id=1018 data-nosnippet>1018</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#1019 id=1019 data-nosnippet>1019</a>    </span>value: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;,
+<a href=#1020 id=1020 data-nosnippet>1020</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#1021 id=1021 data-nosnippet>1021</a>    </span>placeholder: <span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;,
+<a href=#1022 id=1022 data-nosnippet>1022</a>}
+<a href=#1023 id=1023 data-nosnippet>1023</a>
+<a href=#1024 id=1024 data-nosnippet>1024</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; CreateInputText&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#1025 id=1025 data-nosnippet>1025</a>    <span class="doccomment">/// Creates a text input with the given style, label, and custom id (a developer-defined
+<a href=#1026 id=1026 data-nosnippet>1026</a>    /// identifier), leaving all other fields empty.
+<a href=#1027 id=1027 data-nosnippet>1027</a>    </span><span class="kw">pub fn </span>new(style: InputTextStyle, custom_id: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#1028 id=1028 data-nosnippet>1028</a>        <span class="self">Self </span>{
+<a href=#1029 id=1029 data-nosnippet>1029</a>            style,
+<a href=#1030 id=1030 data-nosnippet>1030</a>            custom_id: custom_id.into(),
+<a href=#1031 id=1031 data-nosnippet>1031</a>
+<a href=#1032 id=1032 data-nosnippet>1032</a>            placeholder: <span class="prelude-val">None</span>,
+<a href=#1033 id=1033 data-nosnippet>1033</a>            min_length: <span class="prelude-val">None</span>,
+<a href=#1034 id=1034 data-nosnippet>1034</a>            max_length: <span class="prelude-val">None</span>,
+<a href=#1035 id=1035 data-nosnippet>1035</a>            value: <span class="prelude-val">None</span>,
+<a href=#1036 id=1036 data-nosnippet>1036</a>            required: <span class="bool-val">true</span>,
+<a href=#1037 id=1037 data-nosnippet>1037</a>
+<a href=#1038 id=1038 data-nosnippet>1038</a>            kind: ComponentType::InputText,
+<a href=#1039 id=1039 data-nosnippet>1039</a>        }
+<a href=#1040 id=1040 data-nosnippet>1040</a>    }
+<a href=#1041 id=1041 data-nosnippet>1041</a>
+<a href=#1042 id=1042 data-nosnippet>1042</a>    <span class="doccomment">/// Sets the style of this input text. Replaces the current value as set in [`Self::new`].
+<a href=#1043 id=1043 data-nosnippet>1043</a>    </span><span class="kw">pub fn </span>style(<span class="kw-2">mut </span><span class="self">self</span>, kind: InputTextStyle) -&gt; <span class="self">Self </span>{
+<a href=#1044 id=1044 data-nosnippet>1044</a>        <span class="self">self</span>.style = kind;
+<a href=#1045 id=1045 data-nosnippet>1045</a>        <span class="self">self
+<a href=#1046 id=1046 data-nosnippet>1046</a>    </span>}
+<a href=#1047 id=1047 data-nosnippet>1047</a>
+<a href=#1048 id=1048 data-nosnippet>1048</a>    <span class="doccomment">/// Sets the custom id of the input text, a developer-defined identifier. Replaces the current
+<a href=#1049 id=1049 data-nosnippet>1049</a>    /// value as set in [`Self::new`].
+<a href=#1050 id=1050 data-nosnippet>1050</a>    </span><span class="kw">pub fn </span>custom_id(<span class="kw-2">mut </span><span class="self">self</span>, id: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#1051 id=1051 data-nosnippet>1051</a>        <span class="self">self</span>.custom_id = id.into();
+<a href=#1052 id=1052 data-nosnippet>1052</a>        <span class="self">self
+<a href=#1053 id=1053 data-nosnippet>1053</a>    </span>}
+<a href=#1054 id=1054 data-nosnippet>1054</a>
+<a href=#1055 id=1055 data-nosnippet>1055</a>    <span class="doccomment">/// Sets the placeholder of this input text.
+<a href=#1056 id=1056 data-nosnippet>1056</a>    </span><span class="kw">pub fn </span>placeholder(<span class="kw-2">mut </span><span class="self">self</span>, label: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#1057 id=1057 data-nosnippet>1057</a>        <span class="self">self</span>.placeholder = <span class="prelude-val">Some</span>(label.into());
+<a href=#1058 id=1058 data-nosnippet>1058</a>        <span class="self">self
+<a href=#1059 id=1059 data-nosnippet>1059</a>    </span>}
+<a href=#1060 id=1060 data-nosnippet>1060</a>
+<a href=#1061 id=1061 data-nosnippet>1061</a>    <span class="doccomment">/// Sets the minimum length required for the input text
+<a href=#1062 id=1062 data-nosnippet>1062</a>    </span><span class="kw">pub fn </span>min_length(<span class="kw-2">mut </span><span class="self">self</span>, min: u16) -&gt; <span class="self">Self </span>{
+<a href=#1063 id=1063 data-nosnippet>1063</a>        <span class="self">self</span>.min_length = <span class="prelude-val">Some</span>(min);
+<a href=#1064 id=1064 data-nosnippet>1064</a>        <span class="self">self
+<a href=#1065 id=1065 data-nosnippet>1065</a>    </span>}
+<a href=#1066 id=1066 data-nosnippet>1066</a>
+<a href=#1067 id=1067 data-nosnippet>1067</a>    <span class="doccomment">/// Sets the maximum length required for the input text
+<a href=#1068 id=1068 data-nosnippet>1068</a>    </span><span class="kw">pub fn </span>max_length(<span class="kw-2">mut </span><span class="self">self</span>, max: u16) -&gt; <span class="self">Self </span>{
+<a href=#1069 id=1069 data-nosnippet>1069</a>        <span class="self">self</span>.max_length = <span class="prelude-val">Some</span>(max);
+<a href=#1070 id=1070 data-nosnippet>1070</a>        <span class="self">self
+<a href=#1071 id=1071 data-nosnippet>1071</a>    </span>}
+<a href=#1072 id=1072 data-nosnippet>1072</a>
+<a href=#1073 id=1073 data-nosnippet>1073</a>    <span class="doccomment">/// Sets the value of this input text.
+<a href=#1074 id=1074 data-nosnippet>1074</a>    </span><span class="kw">pub fn </span>value(<span class="kw-2">mut </span><span class="self">self</span>, value: <span class="kw">impl </span>Into&lt;Cow&lt;<span class="lifetime">'a</span>, str&gt;&gt;) -&gt; <span class="self">Self </span>{
+<a href=#1075 id=1075 data-nosnippet>1075</a>        <span class="self">self</span>.value = <span class="prelude-val">Some</span>(value.into());
+<a href=#1076 id=1076 data-nosnippet>1076</a>        <span class="self">self
+<a href=#1077 id=1077 data-nosnippet>1077</a>    </span>}
+<a href=#1078 id=1078 data-nosnippet>1078</a>
+<a href=#1079 id=1079 data-nosnippet>1079</a>    <span class="doccomment">/// Sets if the input text is required
+<a href=#1080 id=1080 data-nosnippet>1080</a>    </span><span class="kw">pub fn </span>required(<span class="kw-2">mut </span><span class="self">self</span>, required: bool) -&gt; <span class="self">Self </span>{
+<a href=#1081 id=1081 data-nosnippet>1081</a>        <span class="self">self</span>.required = required;
+<a href=#1082 id=1082 data-nosnippet>1082</a>        <span class="self">self
+<a href=#1083 id=1083 data-nosnippet>1083</a>    </span>}
+<a href=#1084 id=1084 data-nosnippet>1084</a>}
 </code></pre></div></section></main></body></html>
