@@ -197,7 +197,7 @@
 <a href=#197 id=197 data-nosnippet>197</a>            <span class="kw">let </span>item = <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>member) = guild.members.get_mut(<span class="kw-2">&amp;</span><span class="self">self</span>.user.id) {
 <a href=#198 id=198 data-nosnippet>198</a>                <span class="kw">let </span>item = <span class="prelude-val">Some</span>(member.clone());
 <a href=#199 id=199 data-nosnippet>199</a>
-<a href=#200 id=200 data-nosnippet>200</a>                member.joined_at.clone_from(<span class="kw-2">&amp;</span><span class="prelude-val">Some</span>(<span class="self">self</span>.joined_at));
+<a href=#200 id=200 data-nosnippet>200</a>                member.joined_at.clone_from(<span class="kw-2">&amp;</span><span class="self">self</span>.joined_at);
 <a href=#201 id=201 data-nosnippet>201</a>                member.nick.clone_from(<span class="kw-2">&amp;</span><span class="self">self</span>.nick);
 <a href=#202 id=202 data-nosnippet>202</a>                member.roles.clone_from(<span class="kw-2">&amp;</span><span class="self">self</span>.roles);
 <a href=#203 id=203 data-nosnippet>203</a>                member.user.clone_from(<span class="kw-2">&amp;</span><span class="self">self</span>.user);
@@ -219,7 +219,7 @@
 <a href=#219 id=219 data-nosnippet>219</a>                <span class="kw">let </span><span class="kw-2">mut </span>new_member = Member {
 <a href=#220 id=220 data-nosnippet>220</a>                    __generated_flags: MemberGeneratedFlags::empty(),
 <a href=#221 id=221 data-nosnippet>221</a>                    guild_id: <span class="self">self</span>.guild_id,
-<a href=#222 id=222 data-nosnippet>222</a>                    joined_at: <span class="prelude-val">Some</span>(<span class="self">self</span>.joined_at),
+<a href=#222 id=222 data-nosnippet>222</a>                    joined_at: <span class="self">self</span>.joined_at,
 <a href=#223 id=223 data-nosnippet>223</a>                    nick: <span class="self">self</span>.nick.clone(),
 <a href=#224 id=224 data-nosnippet>224</a>                    roles: <span class="self">self</span>.roles.clone(),
 <a href=#225 id=225 data-nosnippet>225</a>                    user: <span class="self">self</span>.user.clone(),
