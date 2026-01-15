@@ -10,6 +10,7 @@ This example demonstrates how to use Serenity's Discord REST API functionality i
 - ✅ Message sending via REST API
 - ✅ Environment-based configuration
 - ✅ Cross-platform compatibility (works on native and WASM)
+- ✅ Local native testing with `main.rs` for development
 
 ## Prerequisites
 
@@ -412,6 +413,62 @@ wasm-pack build --release --target web --out-dir build
 
 ## Development
 
+### Local Native Testing with main.rs
+
+Before deploying to Cloudflare Workers, you can test the same REST API functionality locally using `main.rs`. This provides a native tokio runtime environment for development and debugging.
+
+**Why use main.rs?**
+- 🧪 Test REST API operations locally before deploying
+- 🐛 Debug with native tools and breakpoints
+- ⚡ Faster development cycle (no wrangler needed)
+- 🔍 Easier to understand code flow with familiar tokio patterns
+
+**Setup:**
+```bash
+# Set your Discord token
+export DISCORD_TOKEN="your_bot_token_here"
+```
+
+**Available Commands:**
+```bash
+# Run the example with cargo
+cargo run --example wasm_rest_api -- <command> [args]
+
+# Or use cargo directly
+cargo run --example wasm_rest_api bot-info
+```
+
+**Commands:**
+- `bot-info` - Get bot application information
+- `bot-user` - Get the bot's user information
+- `channels <guild_id>` - Get channels in a guild
+- `guilds` - Get all guilds the bot is in
+- `send-message <channel_id> <message>` - Send a message to a channel
+
+**Examples:**
+```bash
+# Get bot information
+cargo run --example wasm_rest_api bot-info
+
+# Get bot user information
+cargo run --example wasm_rest_api bot-user
+
+# Get channels in a guild (replace with your guild ID)
+cargo run --example wasm_rest_api channels 123456789
+
+# Get all guilds
+cargo run --example wasm_rest_api guilds
+
+# Send a message (replace with your channel ID)
+cargo run --example wasm_rest_api send-message 123456789 "Hello from native testing!"
+```
+
+**Parallel with lib.rs (Workers):**
+- `main.rs` = Native testing with tokio runtime
+- `lib.rs` = Production deployment to Cloudflare Workers
+- Same REST API operations, different runtimes
+- Easy to translate patterns between environments
+
 ### Local Testing with wrangler
 
 ```bash
@@ -502,10 +559,18 @@ Returns information about the bot's user account.
 
 ### Get Channels
 ```bash
-GET /channels
+POST /channels
+Content-Type: application/json
+
+{
+  "guild_id": "111222333444555666"
+}
 ```
 
-Returns a list of channels the bot has access to.
+Returns a list of channels in a guild (server).
+
+**Request Body:**
+- `guild_id` (string, required): The guild ID to get channels for
 
 **Response:**
 ```json
@@ -576,8 +641,12 @@ curl https://wasm-rest-api.YOUR_SUBDOMAIN.workers.dev/bot/info
 # Get current user
 curl https://wasm-rest-api.YOUR_SUBDOMAIN.workers.dev/bot/user
 
-# Get channels
-curl https://wasm-rest-api.YOUR_SUBDOMAIN.workers.dev/channels
+# Get channels for a guild
+curl -X POST https://wasm-rest-api.YOUR_SUBDOMAIN.workers.dev/channels \
+  -H "Content-Type: application/json" \
+  -d '{
+    "guild_id": "111222333444555666"
+  }'
 
 # Get guilds
 curl https://wasm-rest-api.YOUR_SUBDOMAIN.workers.dev/guilds

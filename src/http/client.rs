@@ -18,12 +18,15 @@ use serde::de::DeserializeOwned;
 use tracing::{debug, instrument, warn};
 
 use super::multipart::{Multipart, MultipartUpload};
-use super::ratelimiting::Ratelimiter;
 use super::request::Request;
 use super::routing::Route;
+
+#[cfg(not(target_arch = "wasm32"))]
+use super::ratelimiting::Ratelimiter;
 use super::typing::Typing;
 use super::{
-    ErrorResponse, GuildPagination, HttpError, LightMethod, MessagePagination, UserPagination,
+    DiscordJsonError, ErrorResponse, GuildPagination, HttpError, LightMethod, MessagePagination,
+    UserPagination,
 };
 use crate::builder::{CreateAllowedMentions, CreateAttachment};
 use crate::constants;
@@ -53,7 +56,9 @@ pub struct HttpBuilder {
     client: Option<Client>,
     #[cfg(target_arch = "wasm32")]
     client: Option<reqwest_wasm::Client>,
+    #[cfg(not(target_arch = "wasm32"))]
     ratelimiter: Option<Ratelimiter>,
+    #[cfg(not(target_arch = "wasm32"))]
     ratelimiter_disabled: bool,
     token: SecretString,
     #[cfg(not(target_arch = "wasm32"))]
@@ -68,9 +73,12 @@ impl HttpBuilder {
     pub fn new(token: impl AsRef<str>) -> Self {
         Self {
             client: None,
+            #[cfg(not(target_arch = "wasm32"))]
             ratelimiter: None,
+            #[cfg(not(target_arch = "wasm32"))]
             ratelimiter_disabled: false,
             token: SecretString::new(parse_token(token)),
+            #[cfg(not(target_arch = "wasm32"))]
             proxy: None,
             application_id: None,
             default_allowed_mentions: None,
@@ -105,6 +113,7 @@ impl HttpBuilder {
     }
 
     /// Sets the ratelimiter to be used. If one isn't provided, a default one will be used.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn ratelimiter(mut self, ratelimiter: Ratelimiter) -> Self {
         self.ratelimiter = Some(ratelimiter);
         self
@@ -116,6 +125,7 @@ impl HttpBuilder {
     /// **Note**: You should **not** disable the ratelimiter unless you have another form of rate
     /// limiting. Disabling the ratelimiter has the main purpose of delegating rate limiting to an
     /// API proxy via [`Self::proxy`] instead of the current process.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn ratelimiter_disabled(mut self, ratelimiter_disabled: bool) -> Self {
         self.ratelimiter_disabled = ratelimiter_disabled;
         self
@@ -168,6 +178,7 @@ impl HttpBuilder {
             reqwest_wasm::Client::builder().build().expect("Cannot build reqwest_wasm::Client")
         });
 
+        #[cfg(not(target_arch = "wasm32"))]
         let ratelimiter = (!self.ratelimiter_disabled).then(|| {
             self.ratelimiter
                 .unwrap_or_else(|| Ratelimiter::new(client.clone(), self.token.expose_secret()))
@@ -186,7 +197,6 @@ impl HttpBuilder {
         #[cfg(target_arch = "wasm32")]
         let http = Http {
             client,
-            ratelimiter,
             token: self.token,
             application_id,
             default_allowed_mentions: self.default_allowed_mentions,
@@ -226,6 +236,7 @@ fn reason_into_header(reason: &str) -> Headers {
 #[derive(Debug)]
 pub struct Http {
     pub(crate) client: Client,
+    #[cfg(not(target_arch = "wasm32"))]
     pub ratelimiter: Option<Ratelimiter>,
     #[cfg(not(target_arch = "wasm32"))]
     pub proxy: Option<String>,
@@ -2597,11 +2608,7 @@ impl Http {
 
         let response = self.request(request).await?;
 
-        Ok(if response.status() == StatusCode::NO_CONTENT {
-            None
-        } else {
-            decode_resp(response).await?
-        })
+        Ok(if response.status().as_u16() == 204 { None } else { decode_resp(response).await? })
     }
 
     // Gets a webhook's message by Id
@@ -4998,6 +5005,7 @@ impl Http {
     /// # }
     /// ```
     #[instrument]
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn request(&self, req: Request<'_>) -> Result<ReqwestResponse> {
         let method = req.method.reqwest_method();
         let response = if let Some(ratelimiter) = &self.ratelimiter {
@@ -5016,11 +5024,113 @@ impl Http {
         }
     }
 
+    /// Performs a request for WASM targets without ratelimiting support.
+    #[instrument]
+    #[cfg(target_arch = "wasm32")]
+    pub async fn request(&self, req: Request<'_>) -> Result<ReqwestResponse> {
+        use http_crate::StatusCode;
+        use reqwest_wasm::{Client, Method};
+        use url::ParseError;
+
+        let method = req.method.reqwest_method();
+        let path = req.route.path();
+
+        // Convert reqwest::Method to reqwest_wasm::Method
+        let wasm_method = match method.as_str() {
+            "GET" => Method::GET,
+            "POST" => Method::POST,
+            "PUT" => Method::PUT,
+            "DELETE" => Method::DELETE,
+            "PATCH" => Method::PATCH,
+            _ => {
+                return Err(Error::Http(HttpError::Url(ParseError::EmptyHost)));
+            },
+        };
+
+        // Use `client's request method directly
+        let path_str = path.to_string();
+        let mut request_builder = self.client.request(wasm_method, path_str);
+
+        // Set headers
+        request_builder = request_builder.header("Authorization", self.token().to_string());
+        request_builder = request_builder.header("User-Agent", constants::USER_AGENT.to_string());
+
+        // Set body
+        if let Some(body) = req.body_ref() {
+            request_builder =
+                request_builder.header("Content-Type", "application/json").body(body.to_vec());
+        }
+
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|e| Error::Http(HttpError::Url(ParseError::EmptyHost)))?;
+
+        if response.status().is_success() {
+            Ok(response)
+        } else {
+            let status_code = StatusCode::from_u16(response.status().as_u16())
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            let error_response = ErrorResponse {
+                status_code,
+                url: path_str,
+                method: reqwest::Method::from_bytes(method.as_str().as_bytes())
+                    .unwrap_or(reqwest::Method::GET),
+                error: DiscordJsonError {
+                    code: status_code.as_u16() as isize,
+                    message: response.text().await.unwrap_or_default(),
+                    errors: vec![],
+                },
+            };
+            Err(Error::Http(HttpError::UnsuccessfulRequest(error_response)))
+        }
+    }
+
     /// Performs a request and then verifies that the response status code is equal to the expected
     /// value.
     ///
     /// This is a function that performs a light amount of work and returns an empty tuple, so it's
     /// called "self.wind" to denote that it's lightweight.
+    #[instrument]
+    #[cfg(target_arch = "wasm32")]
+    pub(super) async fn wind(&self, expected: u16, req: Request<'_>) -> Result<()> {
+        let route = req.route;
+        let method = req.method.reqwest_method();
+        let response = self.request(req).await?;
+
+        if response.status().is_success() {
+            let response_status = response.status().as_u16();
+            if response_status != expected {
+                let route_path = route.path();
+                warn!("Mismatched successful response status from {route_path}! Expected {expected} but got {response_status}");
+            }
+
+            return Ok(());
+        }
+
+        debug!("Unsuccessful response: {response:?}");
+        let status_code = StatusCode::from_u16(response.status().as_u16())
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let error_response = ErrorResponse {
+            status_code,
+            url: route.path().to_string(),
+            method: reqwest::Method::from_bytes(method.as_str().as_bytes())
+                .unwrap_or(reqwest::Method::GET),
+            error: DiscordJsonError {
+                code: status_code.as_u16() as isize,
+                message: response.text().await.unwrap_or_default(),
+                errors: vec![],
+            },
+        };
+        Err(Error::Http(HttpError::UnsuccessfulRequest(error_response)))
+    }
+
+    /// Performs a request and then verifies that the response status code is equal to the expected
+    /// value.
+    ///
+    /// This is a function that performs a light amount of work and returns an empty tuple, so it's
+    /// called "self.wind" to denote that it's lightweight.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(super) async fn wind(&self, expected: u16, req: Request<'_>) -> Result<()> {
         let route = req.route;
         let method = req.method.reqwest_method();
@@ -5043,12 +5153,12 @@ impl Http {
     }
 }
 
-#[cfg(not(feature = "native_tls_backend"))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "native_tls_backend")))]
 fn configure_client_backend(builder: ClientBuilder) -> ClientBuilder {
     builder.use_rustls_tls()
 }
 
-#[cfg(feature = "native_tls_backend")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "native_tls_backend"))]
 fn configure_client_backend(builder: ClientBuilder) -> ClientBuilder {
     builder.use_native_tls()
 }

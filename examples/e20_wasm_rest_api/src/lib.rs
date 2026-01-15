@@ -22,7 +22,7 @@
 
 use serenity::{
     http::Http,
-    model::id::{ChannelId, RoleId, UserId},
+    model::id::{ChannelId, GuildId},
 };
 use worker::{event, Error as WorkerError, Request, Response, Result};
 
@@ -44,7 +44,7 @@ async fn fetch(req: Request, env: worker::Env, _ctx: worker::Context) -> Result<
     match path {
         "/bot/info" => handle_bot_info(&http).await,
         "/bot/user" => handle_current_user(&http).await,
-        "/channels" => handle_channels(&http).await,
+        "/channels" => handle_channels(&http, req).await,
         "/guilds" => handle_guilds(&http).await,
         "/message/send" => handle_send_message(&http, req).await,
         _ => Response::error("Not found", 404),
@@ -82,8 +82,31 @@ async fn handle_current_user(http: &Http) -> Result<Response> {
 }
 
 /// Get channels the bot has access to
-async fn handle_channels(http: &Http) -> Result<Response> {
-    match http.get_channels().await {
+async fn handle_channels(http: &Http, req: Request) -> Result<Response> {
+    // Parse the request body to get guild_id
+    let body = match req.text().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("Failed to read request body: {}", e), 400),
+    };
+
+    let data: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(d) => d,
+        Err(e) => return Response::error(format!("Invalid JSON: {}", e), 400),
+    };
+
+    // Get guild_id from request body
+    let guild_id_str = data
+        .get("guild_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| WorkerError::from("Missing guild_id"))?;
+
+    let guild_id = match guild_id_str.parse::<u64>() {
+        Ok(id) => GuildId::new(id),
+        Err(e) => return Response::error(format!("Invalid guild_id: {}", e), 400),
+    };
+
+    // Get channels for the guild
+    match http.get_channels(guild_id).await {
         Ok(channels) => {
             let response = serde_json::json!({
                 "count": channels.len(),

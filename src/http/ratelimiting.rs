@@ -41,9 +41,9 @@ use std::str::{self, FromStr};
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use crate::internal::http_client::Response;
+use crate::internal::http_client::{Client, HeaderMap as _, StatusCode};
 use crate::internal::sync::{Mutex, RwLock};
-use reqwest::header::HeaderMap;
-use reqwest::{Client, Response, StatusCode};
 use secrecy::{ExposeSecret, SecretString};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, instrument};

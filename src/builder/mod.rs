@@ -14,12 +14,12 @@ use crate::internal::prelude::*;
 
 /// Common trait for all HTTP request builders in this module.
 #[cfg(feature = "http")]
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 pub trait Builder {
-    /// Additional data that's only required when sending a request off to the API.
+    /// Additional data that's only required when sending a request off to API.
     type Context<'ctx>;
     type Built;
-    /// Serializes a builder's fields and sends the request off the API, returning the response.
+    /// Serializes a builder's fields and sends a request off to API, returning response.
     async fn execute(
         self,
         cache_http: impl CacheHttp,

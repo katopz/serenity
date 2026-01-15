@@ -1,8 +1,17 @@
 use std::sync::Arc;
 
+#[cfg(all(feature = "http", target_arch = "wasm32"))]
+compile_error!(
+    "Typing indicators are not supported in WASM builds. \
+    Cloudflare Workers cannot maintain long-running background tasks. \
+    Use Discord Interactions (Slash Commands) or Webhooks instead."
+);
+
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::time::{sleep, Duration};
 
 use crate::http::Http;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::internal::async_runtime::spawn_named;
 use crate::internal::prelude::*;
 use crate::internal::sync::oneshot;

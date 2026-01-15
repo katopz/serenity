@@ -1,6 +1,8 @@
 use std::path::Path;
 
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::fs::File;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::AsyncReadExt;
 #[cfg(feature = "http")]
 use url::Url;
@@ -31,19 +33,15 @@ pub struct CreateAttachment {
 impl CreateAttachment {
     /// Builds an [`CreateAttachment`] from the raw attachment data.
     pub fn bytes(data: impl Into<Vec<u8>>, filename: impl Into<String>) -> CreateAttachment {
-        CreateAttachment {
-            data: data.into(),
-            filename: filename.into(),
-            description: None,
-            id: 0,
-        }
+        CreateAttachment { data: data.into(), filename: filename.into(), description: None, id: 0 }
     }
 
     /// Builds an [`CreateAttachment`] by reading a local file.
     ///
     /// # Errors
     ///
-    /// [`Error::Io`] if reading the file fails.
+    /// [`Error::Io`] if reading of file fails.
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn path(path: impl AsRef<Path>) -> Result<CreateAttachment> {
         let mut file = File::open(path.as_ref()).await?;
         let mut data = Vec::new();
@@ -61,7 +59,8 @@ impl CreateAttachment {
     ///
     /// # Errors
     ///
-    /// [`Error::Io`] error if reading the file fails.
+    /// [`Error::Io`] error if reading of file fails.
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn file(file: &File, filename: impl Into<String>) -> Result<CreateAttachment> {
         let mut data = Vec::new();
         file.try_clone().await?.read_to_end(&mut data).await?;
@@ -73,8 +72,8 @@ impl CreateAttachment {
     ///
     /// # Errors
     ///
-    /// [`Error::Url`] if the URL is invalid, [`Error::Http`] if downloading the data fails.
-    #[cfg(feature = "http")]
+    /// [`Error::Url`] if URL is invalid, [`Error::Http`] if downloading of data fails.
+    #[cfg(all(feature = "http", not(target_arch = "wasm32")))]
     pub async fn url(http: impl AsRef<Http>, url: &str) -> Result<CreateAttachment> {
         let url = Url::parse(url).map_err(|_| Error::Url(url.to_string()))?;
 
@@ -215,11 +214,7 @@ impl EditAttachments {
             new_and_existing_attachments: msg
                 .attachments
                 .iter()
-                .map(|a| {
-                    NewOrExisting::Existing(ExistingAttachment {
-                        id: a.id,
-                    })
-                })
+                .map(|a| NewOrExisting::Existing(ExistingAttachment { id: a.id }))
                 .collect(),
         }
     }
@@ -229,9 +224,7 @@ impl EditAttachments {
     ///
     /// Opposite of [`Self::remove`].
     pub fn keep(mut self, id: AttachmentId) -> Self {
-        self.new_and_existing_attachments.push(NewOrExisting::Existing(ExistingAttachment {
-            id,
-        }));
+        self.new_and_existing_attachments.push(NewOrExisting::Existing(ExistingAttachment { id }));
         self
     }
 

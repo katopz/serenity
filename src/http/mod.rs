@@ -22,6 +22,7 @@
 mod client;
 mod error;
 mod multipart;
+#[cfg(not(target_arch = "wasm32"))]
 mod ratelimiting;
 mod request;
 mod routing;
@@ -35,6 +36,7 @@ pub use crate::internal::http_client::StatusCode;
 pub use self::client::*;
 pub use self::error::*;
 pub use self::multipart::*;
+#[cfg(not(target_arch = "wasm32"))]
 pub use self::ratelimiting::*;
 pub use self::request::*;
 pub use self::routing::*;
@@ -56,9 +58,15 @@ use crate::model::prelude::*;
 /// function will behave as if no `cache`-feature is active.
 ///
 /// If you are calling a function that expects `impl CacheHttp` as argument and you wish to utilise
-/// the `cache`-feature but you got no access to a [`Context`], you can pass a tuple of
+/// `cache`-feature but you got no access to a [`Context`], you can pass a tuple of
 /// `(&Arc<Cache>, &Http)`.
+#[cfg(not(target_arch = "wasm32"))]
 pub trait CacheHttp: Send + Sync {
+    fn http(&self) -> &Http;
+}
+
+#[cfg(target_arch = "wasm32")]
+pub trait CacheHttp {
     fn http(&self) -> &Http;
 
     #[cfg(feature = "cache")]
@@ -75,7 +83,7 @@ where
     fn http(&self) -> &Http {
         (*self).http()
     }
-    #[cfg(feature = "cache")]
+    #[cfg(all(feature = "cache", not(target_arch = "wasm32")))]
     fn cache(&self) -> Option<&Arc<Cache>> {
         (*self).cache()
     }
@@ -88,7 +96,7 @@ where
     fn http(&self) -> &Http {
         (**self).http()
     }
-    #[cfg(feature = "cache")]
+    #[cfg(all(feature = "cache", not(target_arch = "wasm32")))]
     fn cache(&self) -> Option<&Arc<Cache>> {
         (**self).cache()
     }
