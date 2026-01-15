@@ -19,6 +19,341 @@ This example demonstrates how to use Serenity's Discord REST API functionality i
 - **Cloudflare Account**: Free tier is sufficient
 - **Discord Bot**: Create one at https://discord.com/developers/applications
 
+## Platform Differences
+
+### Native vs Cloudflare Workers
+
+**Native Platforms (Linux, macOS, Windows):**
+- ✅ Full tokio runtime support
+- ✅ Arbitrary task spawning (`tokio::spawn`)
+- ✅ Background tasks and workers
+- ✅ File system access
+- ✅ WebSocket/Gateway connections
+
+**Cloudflare Workers (WASM):**
+- ❌ No tokio runtime (not compatible with WASM)
+- ❌ No arbitrary task spawning (all work must complete within request)
+- ❌ No background tasks (use Workers features like Durable Objects)
+- ❌ No file system access (use environment variables, KV, R2, D1)
+- ❌ No WebSocket/Gateway (use REST API, Interactions, Webhooks)
+- ✅ Async operations work fine within request-response cycle
+- ✅ REST API fully supported
+- ✅ Interactions (Slash Commands) fully supported
+- ✅ Webhooks fully supported
+
+### Async Runtime Patterns
+
+**❌ Wrong Pattern for Workers:**
+```rust
+// This WON'T work in Cloudflare Workers
+tokio::spawn(async move {
+    // Background task - Workers don't support this
+});
+
+#[tokio::main]
+async fn main() {
+    // tokio::main not compatible with WASM
+}
+```
+
+**✅ Correct Pattern for Workers:**
+```rust
+use worker::*;
+
+#[event(fetch)]
+async fn fetch(req: Request, env: Env) -> Result<Response> {
+    // All async work happens inline within the request-response cycle
+    let token = env.var("DISCORD_TOKEN")?.to_string();
+    let http = Http::new(token);
+    
+    // Chain async operations inline
+    let user = http.get_current_user().await?;
+    let guilds = http.get_guilds(None, None).await?;
+    
+    // Return response
+    Response::ok(format!("Bot: {} in {} guilds", user.name, guilds.len()))
+}
+```
+
+### Time Utilities
+
+**Native:**
+```rust
+use tokio::time::{sleep, Duration};
+
+#[tokio::main]
+async fn main() {
+    sleep(Duration::from_secs(1)).await;
+}
+```
+
+**Workers:**
+```rust
+use std::time::Duration;
+
+#[event(fetch)]
+async fn fetch(req: Request, env: Env) -> Result<Response> {
+    // Use JavaScript timers or Workers features
+    // For rate limiting, use Workers KV or Durable Objects
+    // For simple delays, use Promise-based timers
+    Response::ok("Done")
+}
+```
+
+## Workers-Specific Alternatives
+
+### Rate Limiting
+
+Instead of relying on tokio timers for rate limiting, use Workers-native solutions:
+
+**Option 1: Workers KV (Key-Value Storage)**
+```javascript
+// Use KV to track rate limits
+const RATE_LIMIT_KEY = "ratelimit:user:{userId}";
+const MAX_REQUESTS = 100;
+const WINDOW = 3600; // 1 hour in seconds
+
+export default {
+  async fetch(request, env) {
+    const userId = request.headers.get('X-User-ID');
+    const key = RATE_LIMIT_KEY.replace('{userId}', userId);
+    
+    const current = await env.RATE_LIMIT.get(key, { type: 'json' }) || { count: 0 };
+    
+    if (current.count >= MAX_REQUESTS) {
+      return new Response('Rate limit exceeded', { status: 429 });
+    }
+    
+    current.count++;
+    await env.RATE_LIMIT.put(key, JSON.stringify(current), {
+      expirationTtl: WINDOW
+    });
+    
+    // Process request...
+  }
+};
+```
+
+**Option 2: Durable Objects (For distributed rate limiting)**
+```javascript
+// Create a rate limiter object
+export class RateLimiter {
+  constructor(state, env) {
+    this.state = state;
+    this.storage = state.storage;
+  }
+  
+  async checkLimit(userId, maxRequests, window) {
+    const key = `user:${userId}`;
+    const data = await this.storage.get(key);
+    const current = data ? JSON.parse(data) : { count: 0, reset: Date.now() + window };
+    
+    if (current.count >= maxRequests && Date.now() < current.reset) {
+      return false; // Rate limited
+    }
+    
+    if (Date.now() >= current.reset) {
+      current.count = 1;
+      current.reset = Date.now() + window;
+    } else {
+      current.count++;
+    }
+    
+    await this.storage.put(key, JSON.stringify(current));
+    return true;
+  }
+}
+```
+
+### Background Tasks
+
+Since Workers don't support background task spawning, use these alternatives:
+
+**Option 1: Cron Triggers**
+```toml
+# wrangler.toml
+[triggers]
+crons = ["*/5 * * * *"]  # Every 5 minutes
+```
+
+```javascript
+export default {
+  async scheduled(event, env) {
+    // This runs on a schedule
+    console.log("Scheduled task running");
+    
+    // Example: Check for expired items
+    await cleanupExpiredItems(env);
+  },
+  
+  async fetch(request, env) {
+    // Regular request handler
+    return new Response("OK");
+  }
+};
+```
+
+**Option 2: Queue Workers**
+```javascript
+// Use Workers Queue to offload work
+export default {
+  async queue(batch, env) {
+    // Process messages from a queue
+    for (const message of batch.messages) {
+      await processMessage(message, env);
+      message.ack();
+    }
+  },
+};
+```
+
+**Option 3: Durable Objects (For persistent state)**
+```javascript
+// Create a stateful object that maintains connection
+export class PersistentWorker {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+  
+  async fetch(request) {
+    // This object maintains state across requests
+    const url = new URL(request.url);
+    
+    switch (url.pathname) {
+      case '/process':
+        return this.processRequest(request);
+      case '/status':
+        return this.getStatus();
+      default:
+        return new Response('Not found', { status: 404 });
+    }
+  }
+  
+  async processRequest(request) {
+    // Process and store state
+    await this.state.storage.put('lastProcessed', Date.now());
+    return new Response('Processed');
+  }
+  
+  async getStatus() {
+    const lastProcessed = await this.state.storage.get('lastProcessed');
+    return new Response(`Last processed: ${lastProcessed}`);
+  }
+}
+```
+
+### File Storage
+
+Workers have no file system, use these alternatives:
+
+**Option 1: Workers KV (Simple Key-Value)**
+```javascript
+// Store configuration or cache
+await env.CACHE.put('config', JSON.stringify(config));
+const config = await env.CACHE.get('config', { type: 'json' });
+```
+
+**Option 2: Workers R2 (S3-compatible Object Storage)**
+```javascript
+// Upload file to R2
+const object = await env.BUCKET.put(
+  'files/example.txt',
+  new TextEncoder().encode('Hello from R2!')
+);
+
+// Download file from R2
+const object = await env.BUCKET.get('files/example.txt');
+const text = await object.text();
+```
+
+**Option 3: External URLs**
+```javascript
+// Instead of uploading files, generate presigned URLs
+const uploadUrl = await generateUploadUrl(env);
+return new Response(JSON.stringify({ uploadUrl }));
+```
+
+### WebSocket Connections
+
+Workers cannot maintain persistent WebSocket connections. Use these alternatives:
+
+**Option 1: Durable Objects (For WebSocket support)**
+```javascript
+// Durable Objects can maintain WebSocket connections
+export class WebSocketServer {
+  constructor(state, env) {
+    this.state = state;
+    this.webSockets = [];
+  }
+  
+  async webSocketMessage(ws, message) {
+    // Handle WebSocket messages
+    ws.send(`Echo: ${message}`);
+  }
+  
+  async webSocketClose(ws, code, reason) {
+    // Handle disconnection
+    this.webSockets = this.webSockets.filter(w => w !== ws);
+  }
+}
+```
+
+**Option 2: Server-Sent Events (SSE)**
+```javascript
+export default {
+  async fetch(request, env) {
+    const { readable, writable } = new ReadableStream({
+      start(controller) {
+        const interval = setInterval(() => {
+          controller.enqueue(`data: ${Date.now()}\n\n`);
+        }, 1000);
+        
+        request.signal.addEventListener('abort', () => {
+          clearInterval(interval);
+          controller.close();
+        });
+      }
+    });
+    
+    return new Response(readable, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      }
+    });
+  }
+};
+```
+
+**Option 3: Discord Interactions (For Discord bots)**
+```javascript
+// Use Discord Interactions (Slash Commands) instead of Gateway
+export default {
+  async fetch(request, env) {
+    if (request.method === 'POST' && request.url.includes('/interactions')) {
+      const interaction = await request.json();
+      
+      if (interaction.type === 1) { // PING
+        return new Response(JSON.stringify({ type: 1 }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      if (interaction.type === 2) { // APPLICATION_COMMAND
+        return new Response(JSON.stringify({
+          type: 4,
+          data: { content: "Hello from Workers!" }
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+  }
+};
+```
+
 ## Setup
 
 ### 1. Create a Discord Application
