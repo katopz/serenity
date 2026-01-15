@@ -23,16 +23,13 @@ mod error;
 #[cfg(feature = "gateway")]
 mod event_handler;
 
-use std::future::IntoFuture;
-use std::ops::Range;
-use std::sync::Arc;
-#[cfg(feature = "framework")]
-use std::sync::OnceLock;
-
-use crate::internal::sync::{Mutex, RwLock};
+use crate::internal::sync::{Mutex, OnceLock, RwLock};
 use futures::channel::mpsc::UnboundedReceiver as Receiver;
 use futures::future::BoxFuture;
 use futures::StreamExt as _;
+use std::future::IntoFuture;
+use std::ops::Range;
+use std::sync::Arc;
 use tracing::{debug, error, info, instrument};
 use typemap_rev::{TypeMap, TypeMapKey};
 

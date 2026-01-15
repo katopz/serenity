@@ -1,11 +1,9 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-#[cfg(feature = "framework")]
-use std::sync::OnceLock;
 use std::time::Duration;
 
-use crate::internal::sync::{Mutex, RwLock};
+use crate::internal::sync::{Mutex, OnceLock, RwLock};
 use futures::channel::mpsc::{self, UnboundedReceiver as Receiver, UnboundedSender as Sender};
 use futures::{SinkExt, StreamExt};
 use tokio::time::timeout;
