@@ -56,7 +56,7 @@ typemap_rev = { version = "0.3.0", optional = true }
 bytes = { version = "1.5.0", optional = true }
 percent-encoding = { version = "2.3.0", optional = true }
 mini-moka = { version = "0.10.2", optional = true }
-http = { version = "0.2.9", optional = true }
+http_crate = { version = "1.4", optional = true, package = "http" }
 mime_guess = { version = "2.0.4", optional = true }
 dashmap = { version = "5.5.3", features = ["serde"], optional = true }
 parking_lot = { version = "0.12.1", optional = true }
@@ -78,7 +78,7 @@ command_attr = { version = "0.5.4", path = "./command_attr", optional = true }
 serenity-voice-model = { version = "0.2.1", path = "./voice-model", optional = true }
 
 [dev-dependencies.http_crate]
-version = ">=0.2.11"
+version = "1.4"
 package = "http"
 
 [features]
@@ -117,7 +117,7 @@ framework = ["client", "model", "utils"]
 # Enables gateway support, which allows bots to listen for Discord events.
 gateway = ["flate2"]
 # Enables HTTP, which enables bots to execute actions on Discord.
-http = ["http", "mime_guess", "percent-encoding", "reqwest"]
+http = ["dep:http_crate", "mime_guess", "percent-encoding", "reqwest"]
 # Enables wrapper methods around HTTP requests on model types.
 # Requires "builder" to configure the requests and "http" to execute them.
 # Note: the model type definitions themselves are always active, regardless of this feature.

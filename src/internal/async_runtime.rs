@@ -39,7 +39,7 @@ use std::future::Future;
 
 /// Spawn a named task for debugging purposes.
 ///
-/// On native platforms with `tokio_unstable` and `tokio_task_builder` features,
+/// On native platforms with the `tokio_task_builder` feature,
 /// this will spawn a task with the given name in the format "serenity::{name}".
 /// Otherwise, it spawns an unnamed task.
 ///
@@ -74,13 +74,13 @@ where
     F: Future<Output = T> + Send + 'static,
     T: Send + 'static,
 {
-    #[cfg(all(tokio_unstable, feature = "tokio_task_builder"))]
+    #[cfg(feature = "tokio_task_builder")]
     let handle = tokio::task::Builder::new()
         .name(&*format!("serenity::{}", _name))
         .spawn(future)
         .expect("called outside tokio runtime");
 
-    #[cfg(not(all(tokio_unstable, feature = "tokio_task_builder")))]
+    #[cfg(not(feature = "tokio_task_builder"))]
     let handle = tokio::spawn(future);
 
     handle
@@ -146,7 +146,6 @@ mod tests {
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(feature = "tokio_unstable")]
     #[cfg(feature = "tokio_task_builder")]
     fn test_spawn_named_is_compile_time_check() {
         // This test verifies that spawn_named compiles with task names
@@ -157,7 +156,7 @@ mod tests {
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(not(all(tokio_unstable, feature = "tokio_task_builder"))]
+    #[cfg(not(feature = "tokio_task_builder"))]
     fn test_spawn_named_without_task_builder() {
         // This test verifies that spawn_named compiles without task names
         let handle = spawn_named("test_task", async { 42 });

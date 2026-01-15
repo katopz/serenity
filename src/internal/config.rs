@@ -78,7 +78,7 @@ pub fn get_application_id() -> Result<u64, ConfigError> {
     let value =
         env::var("DISCORD_APPLICATION_ID").map_err(|_| ConfigError::ApplicationIdNotFound)?;
 
-    value.parse().map_err(|e| ConfigError::ApplicationIdParseError(e.to_string()))
+    value.parse::<u64>().map_err(|e| ConfigError::ApplicationIdParseError(e.to_string()))
 }
 
 /// Check if all required configuration is available.

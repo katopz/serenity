@@ -20,8 +20,8 @@ use crate::client::{EventHandler, RawEventHandler};
 use crate::framework::Framework;
 use crate::gateway::{ConnectionStage, GatewayError, PresenceData};
 use crate::http::Http;
+use crate::internal::async_runtime::spawn_named;
 use crate::internal::prelude::*;
-use crate::internal::tokio::spawn_named;
 use crate::model::gateway::GatewayIntents;
 
 /// A manager for handling the status of shards by starting them, restarting them, and stopping

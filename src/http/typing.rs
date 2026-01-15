@@ -3,9 +3,9 @@ use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 
 use crate::http::Http;
+use crate::internal::async_runtime::spawn_named;
 use crate::internal::prelude::*;
 use crate::internal::sync::oneshot;
-use crate::internal::tokio::spawn_named;
 use crate::model::id::ChannelId;
 
 /// A struct to start typing in a [`Channel`] for an indefinite period of time.
@@ -59,29 +59,16 @@ impl Typing {
     /// Returns an  [`Error::Http`] if there is an error.
     ///
     /// [`Channel`]: crate::model::channel::Channel
+    #[cfg(not(feature = "wasm"))]
     pub fn start(http: Arc<Http>, channel_id: ChannelId) -> Self {
         let (sx, mut rx) = oneshot::channel();
 
         spawn_named::<_, Result<_>>("typing::start", async move {
             loop {
-                #[cfg(feature = "wasm")]
-                {
-                    use futures::stream::StreamExt;
-                    tokio::select! {
-                        _ = rx.next() => break,
-                        _ = sleep(Duration::from_secs(7)) => {
-                            http.broadcast_typing(channel_id).await?;
-                        }
-                    }
-                }
-
-                #[cfg(not(feature = "wasm"))]
-                {
-                    tokio::select! {
-                        _ = rx.recv() => break,
-                        _ = sleep(Duration::from_secs(7)) => {
-                            http.broadcast_typing(channel_id).await?;
-                        }
+                tokio::select! {
+                    _ = &mut rx => break,
+                    _ = sleep(Duration::from_secs(7)) => {
+                        http.broadcast_typing(channel_id).await?;
                     }
                 }
             }
@@ -90,6 +77,23 @@ impl Typing {
         });
 
         Self(sx)
+    }
+
+    /// Compile-time assertion that Typing is not supported in WASM.
+    ///
+    /// Cloudflare Workers cannot support long-running background tasks like typing indicators,
+    /// which require sending HTTP requests every 7 seconds indefinitely.
+    ///
+    /// Use Discord Interactions (Slash Commands) or Webhooks instead, which work within the
+    /// request-response cycle of Workers.
+    #[cfg(feature = "wasm")]
+    pub fn start(_http: Arc<Http>, _channel_id: ChannelId) -> Self {
+        compile_error!(
+            "Typing indicators are not supported in WASM builds. \
+            Cloudflare Workers cannot maintain long-running background tasks. \
+            Use Discord Interactions (Slash Commands) or Webhooks instead."
+        );
+        unreachable!("compile_error above prevents this from being called")
     }
 
     /// Stops typing in [`Channel`].

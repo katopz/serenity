@@ -10,5 +10,3 @@ pub mod http_client;
 pub mod config;
 
 pub mod async_runtime;
-
-pub mod tokio;

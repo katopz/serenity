@@ -7,11 +7,11 @@ pub use reqwest::{Client, ClientBuilder};
 pub use reqwest_wasm::{Client, ClientBuilder};
 
 // Common types from the http crate - both reqwest and reqwest-wasm use this
-pub use http::HeaderMap;
-pub use http::HeaderValue;
-pub use http::Method;
-pub use http::StatusCode;
-pub use http::Uri;
+pub use http_crate::HeaderMap;
+pub use http_crate::HeaderValue;
+pub use http_crate::Method;
+pub use http_crate::StatusCode;
+pub use http_crate::Uri;
 
 // Re-export Url from url crate
 pub use url::Url;
