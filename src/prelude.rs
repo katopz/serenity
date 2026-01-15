@@ -13,7 +13,7 @@
 //!
 //! [`serenity::Error`]: crate::Error
 
-pub use tokio::sync::{Mutex, RwLock};
+pub use crate::internal::sync::{Mutex, RwLock};
 #[cfg(feature = "client")]
 pub use typemap_rev::{TypeMap, TypeMapKey};
 

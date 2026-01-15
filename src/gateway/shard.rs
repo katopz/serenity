@@ -1,21 +1,15 @@
 use std::sync::Arc;
 use std::time::{Duration as StdDuration, Instant};
 
-use tokio::sync::Mutex;
+use crate::internal::sync::Mutex;
 use tokio_tungstenite::tungstenite::error::Error as TungsteniteError;
 use tokio_tungstenite::tungstenite::protocol::frame::CloseFrame;
 use tracing::{debug, error, info, instrument, trace, warn};
 use url::Url;
 
 use super::{
-    ActivityData,
-    ChunkGuildFilter,
-    ConnectionStage,
-    GatewayError,
-    PresenceData,
-    ReconnectType,
-    ShardAction,
-    WsClient,
+    ActivityData, ChunkGuildFilter, ConnectionStage, GatewayError, PresenceData, ReconnectType,
+    ShardAction, WsClient,
 };
 use crate::constants::{self, close_codes};
 use crate::internal::prelude::*;

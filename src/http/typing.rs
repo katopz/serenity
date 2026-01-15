@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use tokio::sync::oneshot::error::TryRecvError;
-use tokio::sync::oneshot::{self, Sender};
 use tokio::time::{sleep, Duration};
 
 use crate::http::Http;
 use crate::internal::prelude::*;
+use crate::internal::sync::oneshot;
 use crate::internal::tokio::spawn_named;
 use crate::model::id::ChannelId;
 
@@ -46,7 +45,7 @@ use crate::model::id::ChannelId;
 ///
 /// [`Channel`]: crate::model::channel::Channel
 #[derive(Debug)]
-pub struct Typing(Sender<()>);
+pub struct Typing(oneshot::Sender<()>);
 
 impl Typing {
     /// Starts typing in the specified [`Channel`] for an indefinite period of time.
@@ -65,16 +64,26 @@ impl Typing {
 
         spawn_named::<_, Result<_>>("typing::start", async move {
             loop {
-                match rx.try_recv() {
-                    Ok(()) | Err(TryRecvError::Closed) => break,
-                    _ => (),
+                #[cfg(feature = "wasm")]
+                {
+                    use futures::stream::StreamExt;
+                    tokio::select! {
+                        _ = rx.next() => break,
+                        _ = sleep(Duration::from_secs(7)) => {
+                            http.broadcast_typing(channel_id).await?;
+                        }
+                    }
                 }
 
-                http.broadcast_typing(channel_id).await?;
-
-                // It is unclear for how long typing persists after this method is called.
-                // It is generally assumed to be 7 or 10 seconds, so we use 7 to be safe.
-                sleep(Duration::from_secs(7)).await;
+                #[cfg(not(feature = "wasm"))]
+                {
+                    tokio::select! {
+                        _ = rx.recv() => break,
+                        _ = sleep(Duration::from_secs(7)) => {
+                            http.broadcast_typing(channel_id).await?;
+                        }
+                    }
+                }
             }
 
             Ok(())

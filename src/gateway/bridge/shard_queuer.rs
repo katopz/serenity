@@ -3,9 +3,9 @@ use std::sync::Arc;
 #[cfg(feature = "framework")]
 use std::sync::OnceLock;
 
+use crate::internal::sync::{Mutex, RwLock};
 use futures::channel::mpsc::UnboundedReceiver as Receiver;
 use futures::StreamExt;
-use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, timeout, Duration, Instant};
 use tracing::{debug, info, instrument, warn};
 use typemap_rev::TypeMap;
@@ -13,12 +13,7 @@ use typemap_rev::TypeMap;
 #[cfg(feature = "voice")]
 use super::VoiceGatewayManager;
 use super::{
-    ShardId,
-    ShardManager,
-    ShardMessenger,
-    ShardQueuerMessage,
-    ShardRunner,
-    ShardRunnerInfo,
+    ShardId, ShardManager, ShardMessenger, ShardQueuerMessage, ShardRunner, ShardRunnerInfo,
     ShardRunnerOptions,
 };
 #[cfg(feature = "cache")]

@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use crate::internal::sync::{Mutex, RwLock};
 use futures::channel::mpsc::{self, UnboundedReceiver as Receiver, UnboundedSender as Sender};
 use futures::{SinkExt, StreamExt};
-use tokio::sync::{Mutex, RwLock};
 use tokio::time::timeout;
 use tracing::{info, instrument, warn};
 use typemap_rev::TypeMap;

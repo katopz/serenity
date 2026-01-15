@@ -29,10 +29,10 @@ use std::sync::Arc;
 #[cfg(feature = "framework")]
 use std::sync::OnceLock;
 
+use crate::internal::sync::{Mutex, RwLock};
 use futures::channel::mpsc::UnboundedReceiver as Receiver;
 use futures::future::BoxFuture;
 use futures::StreamExt as _;
-use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, instrument};
 use typemap_rev::{TypeMap, TypeMapKey};
 

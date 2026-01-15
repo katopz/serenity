@@ -41,10 +41,10 @@ use std::str::{self, FromStr};
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use crate::internal::sync::{Mutex, RwLock};
 use reqwest::header::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
 use secrecy::{ExposeSecret, SecretString};
-use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, instrument};
 
@@ -413,12 +413,7 @@ impl Ratelimit {
 
 impl Default for Ratelimit {
     fn default() -> Self {
-        Self {
-            limit: i64::MAX,
-            remaining: i64::MAX,
-            reset: None,
-            reset_after: None,
-        }
+        Self { limit: i64::MAX, remaining: i64::MAX, reset: None, reset_after: None }
     }
 }
 
