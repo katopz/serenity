@@ -6,11 +6,13 @@ use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
-use reqwest::header::{HeaderMap as Headers, HeaderValue};
 #[cfg(feature = "utils")]
-use reqwest::Url;
-use reqwest::{Client, ClientBuilder, Response as ReqwestResponse, StatusCode};
+use crate::internal::http_client::Url;
+use crate::internal::http_client::{
+    Client, ClientBuilder, Response as ReqwestResponse, StatusCode,
+};
+use crate::internal::http_client::{HeaderMap as Headers, HeaderValue};
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::DeserializeOwned;
 use tracing::{debug, instrument, warn};
@@ -21,12 +23,7 @@ use super::request::Request;
 use super::routing::Route;
 use super::typing::Typing;
 use super::{
-    ErrorResponse,
-    GuildPagination,
-    HttpError,
-    LightMethod,
-    MessagePagination,
-    UserPagination,
+    ErrorResponse, GuildPagination, HttpError, LightMethod, MessagePagination, UserPagination,
 };
 use crate::builder::{CreateAllowedMentions, CreateAttachment};
 use crate::constants;
@@ -52,10 +49,14 @@ use crate::model::prelude::*;
 /// ```
 #[must_use]
 pub struct HttpBuilder {
+    #[cfg(not(target_arch = "wasm32"))]
     client: Option<Client>,
+    #[cfg(target_arch = "wasm32")]
+    client: Option<reqwest_wasm::Client>,
     ratelimiter: Option<Ratelimiter>,
     ratelimiter_disabled: bool,
     token: SecretString,
+    #[cfg(not(target_arch = "wasm32"))]
     proxy: Option<String>,
     application_id: Option<ApplicationId>,
     default_allowed_mentions: Option<CreateAllowedMentions>,
@@ -89,8 +90,16 @@ impl HttpBuilder {
         self
     }
 
-    /// Sets the [`reqwest::Client`]. If one isn't provided, a default one will be used.
+    /// Sets the HTTP client. If one isn't provided, a default one will be used.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn client(mut self, client: Client) -> Self {
+        self.client = Some(client);
+        self
+    }
+
+    /// Sets the HTTP client. If one isn't provided, a default one will be used.
+    #[cfg(target_arch = "wasm32")]
+    pub fn client(mut self, client: reqwest_wasm::Client) -> Self {
         self.client = Some(client);
         self
     }
@@ -125,7 +134,10 @@ impl HttpBuilder {
     /// (e.g. using [`reqwest::Proxy`]).
     ///
     /// [`twilight-http-proxy`]: https://github.com/twilight-rs/http-proxy
+    /// Sets the proxy for HTTP requests. Only available on non-WASM platforms.
+    ///
     /// [`HTTP CONNECT`]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/CONNECT
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
         self.proxy = Some(proxy.into());
         self
@@ -140,14 +152,20 @@ impl HttpBuilder {
         self
     }
 
-    /// Use the given configuration to build the `Http` client.
+    /// Use given configuration to build `Http` client.
     #[must_use]
     pub fn build(self) -> Http {
         let application_id = AtomicU64::new(self.application_id.map_or(0, ApplicationId::get));
 
+        #[cfg(not(target_arch = "wasm32"))]
         let client = self.client.unwrap_or_else(|| {
             let builder = configure_client_backend(Client::builder());
             builder.build().expect("Cannot build reqwest::Client")
+        });
+
+        #[cfg(target_arch = "wasm32")]
+        let client = self.client.unwrap_or_else(|| {
+            reqwest_wasm::Client::builder().build().expect("Cannot build reqwest_wasm::Client")
         });
 
         let ratelimiter = (!self.ratelimiter_disabled).then(|| {
@@ -155,14 +173,26 @@ impl HttpBuilder {
                 .unwrap_or_else(|| Ratelimiter::new(client.clone(), self.token.expose_secret()))
         });
 
-        Http {
+        #[cfg(not(target_arch = "wasm32"))]
+        let http = Http {
             client,
             ratelimiter,
             proxy: self.proxy,
             token: self.token,
             application_id,
             default_allowed_mentions: self.default_allowed_mentions,
-        }
+        };
+
+        #[cfg(target_arch = "wasm32")]
+        let http = Http {
+            client,
+            ratelimiter,
+            token: self.token,
+            application_id,
+            default_allowed_mentions: self.default_allowed_mentions,
+        };
+
+        http
     }
 }
 
@@ -197,6 +227,7 @@ fn reason_into_header(reason: &str) -> Headers {
 pub struct Http {
     pub(crate) client: Client,
     pub ratelimiter: Option<Ratelimiter>,
+    #[cfg(not(target_arch = "wasm32"))]
     pub proxy: Option<String>,
     token: SecretString,
     application_id: AtomicU64,
@@ -243,10 +274,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Put,
-                route: Route::GuildMember {
-                    guild_id,
-                    user_id,
-                },
+                route: Route::GuildMember { guild_id, user_id },
                 params: None,
             })
             .await?;
@@ -270,18 +298,17 @@ impl Http {
         role_id: RoleId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Put,
-            route: Route::GuildMemberRole {
-                guild_id,
-                role_id,
-                user_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Put,
+                route: Route::GuildMemberRole { guild_id, role_id, user_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -303,17 +330,17 @@ impl Http {
     ) -> Result<()> {
         let delete_message_seconds = u32::from(delete_message_days) * 86400;
 
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: reason.map(reason_into_header),
-            method: LightMethod::Put,
-            route: Route::GuildBan {
-                guild_id,
-                user_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: reason.map(reason_into_header),
+                method: LightMethod::Put,
+                route: Route::GuildBan { guild_id, user_id },
+                params: Some(vec![("delete_message_seconds", delete_message_seconds.to_string())]),
             },
-            params: Some(vec![("delete_message_seconds", delete_message_seconds.to_string())]),
-        })
+        )
         .await
     }
 
@@ -332,9 +359,7 @@ impl Http {
             multipart: None,
             headers: reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildBulkBan {
-                guild_id,
-            },
+            route: Route::GuildBulkBan { guild_id },
             params: None,
         })
         .await
@@ -348,16 +373,17 @@ impl Http {
     /// This should rarely be used for bots, although it is a good indicator that a long-running
     /// command is still being processed.
     pub async fn broadcast_typing(&self, channel_id: ChannelId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Post,
-            route: Route::ChannelTyping {
-                channel_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Post,
+                route: Route::ChannelTyping { channel_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -382,9 +408,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildChannels {
-                guild_id,
-            },
+            route: Route::GuildChannels { guild_id },
             params: None,
         })
         .await
@@ -422,10 +446,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::ChannelMessageThreads {
-                channel_id,
-                message_id,
-            },
+            route: Route::ChannelMessageThreads { channel_id, message_id },
             params: None,
         })
         .await
@@ -445,9 +466,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::ChannelThreads {
-                channel_id,
-            },
+            route: Route::ChannelThreads { channel_id },
             params: None,
         })
         .await
@@ -480,9 +499,7 @@ impl Http {
             }),
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::ChannelForumPosts {
-                channel_id,
-            },
+            route: Route::ChannelForumPosts { channel_id },
             params: None,
         })
         .await
@@ -506,9 +523,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildEmojis {
-                guild_id,
-            },
+            route: Route::GuildEmojis { guild_id },
             params: None,
         })
         .await
@@ -525,9 +540,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::Emojis {
-                application_id: self.try_application_id()?,
-            },
+            route: Route::Emojis { application_id: self.try_application_id()? },
             params: None,
         })
         .await
@@ -583,9 +596,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::Commands {
-                application_id: self.try_application_id()?,
-            },
+            route: Route::Commands { application_id: self.try_application_id()? },
             params: None,
         })
         .await
@@ -601,9 +612,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Put,
-            route: Route::Commands {
-                application_id: self.try_application_id()?,
-            },
+            route: Route::Commands { application_id: self.try_application_id()? },
             params: None,
         })
         .await
@@ -620,10 +629,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Put,
-            route: Route::GuildCommands {
-                application_id: self.try_application_id()?,
-                guild_id,
-            },
+            route: Route::GuildCommands { application_id: self.try_application_id()?, guild_id },
             params: None,
         })
         .await
@@ -692,10 +698,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::GuildCommands {
-                application_id: self.try_application_id()?,
-                guild_id,
-            },
+            route: Route::GuildCommands { application_id: self.try_application_id()?, guild_id },
             params: None,
         })
         .await
@@ -716,17 +719,17 @@ impl Http {
         map: &Value,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: Some(to_vec(map)?),
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Post,
-            route: Route::GuildIntegration {
-                guild_id,
-                integration_id,
+        self.wind(
+            204,
+            Request {
+                body: Some(to_vec(map)?),
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Post,
+                route: Route::GuildIntegration { guild_id, integration_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -748,10 +751,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::InteractionResponse {
-                interaction_id,
-                token: interaction_token,
-            },
+            route: Route::InteractionResponse { interaction_id, token: interaction_token },
             params: None,
         };
 
@@ -791,9 +791,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::ChannelInvites {
-                channel_id,
-            },
+            route: Route::ChannelInvites { channel_id },
             params: None,
         })
         .await
@@ -809,17 +807,17 @@ impl Http {
     ) -> Result<()> {
         let body = to_vec(map)?;
 
-        self.wind(204, Request {
-            body: Some(body),
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Put,
-            route: Route::ChannelPermission {
-                channel_id,
-                target_id,
+        self.wind(
+            204,
+            Request {
+                body: Some(body),
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Put,
+                route: Route::ChannelPermission { channel_id, target_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -845,18 +843,21 @@ impl Http {
         message_id: MessageId,
         reaction_type: &ReactionType,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Put,
-            route: Route::ChannelMessageReactionMe {
-                channel_id,
-                message_id,
-                reaction: &reaction_type.as_data(),
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Put,
+                route: Route::ChannelMessageReactionMe {
+                    channel_id,
+                    message_id,
+                    reaction: &reaction_type.as_data(),
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
     /// Creates a role.
@@ -872,9 +873,7 @@ impl Http {
                 multipart: None,
                 headers: audit_log_reason.map(reason_into_header),
                 method: LightMethod::Post,
-                route: Route::GuildRoles {
-                    guild_id,
-                },
+                route: Route::GuildRoles { guild_id },
                 params: None,
             })
             .await?;
@@ -905,9 +904,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildScheduledEvents {
-                guild_id,
-            },
+            route: Route::GuildScheduledEvents { guild_id },
             params: None,
         })
         .await
@@ -934,9 +931,7 @@ impl Http {
             }),
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildStickers {
-                guild_id,
-            },
+            route: Route::GuildStickers { guild_id },
             params: None,
         })
         .await
@@ -962,20 +957,14 @@ impl Http {
             EntitlementOwner::User(id) => (id.get(), 2),
         };
 
-        let map = TestEntitlement {
-            sku_id,
-            owner_id,
-            owner_type,
-        };
+        let map = TestEntitlement { sku_id, owner_id, owner_type };
 
         self.fire(Request {
             body: Some(to_vec(&map)?),
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::Entitlements {
-                application_id: self.try_application_id()?,
-            },
+            route: Route::Entitlements { application_id: self.try_application_id()? },
             params: None,
         })
         .await
@@ -1020,9 +1009,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::ChannelWebhooks {
-                channel_id,
-            },
+            route: Route::ChannelWebhooks { channel_id },
             params: None,
         })
         .await
@@ -1039,9 +1026,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Delete,
-            route: Route::Channel {
-                channel_id,
-            },
+            route: Route::Channel { channel_id },
             params: None,
         })
         .await
@@ -1053,16 +1038,17 @@ impl Http {
         channel_id: ChannelId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::StageInstance {
-                channel_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::StageInstance { channel_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1075,33 +1061,33 @@ impl Http {
         emoji_id: EmojiId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildEmoji {
-                guild_id,
-                emoji_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildEmoji { guild_id, emoji_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
     /// Deletes an application emoji.
     pub async fn delete_application_emoji(&self, emoji_id: EmojiId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::Emoji {
-                application_id: self.try_application_id()?,
-                emoji_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::Emoji { application_id: self.try_application_id()?, emoji_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1111,49 +1097,53 @@ impl Http {
         interaction_token: &str,
         message_id: MessageId,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::WebhookFollowupMessage {
-                application_id: self.try_application_id()?,
-                token: interaction_token,
-                message_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::WebhookFollowupMessage {
+                    application_id: self.try_application_id()?,
+                    token: interaction_token,
+                    message_id,
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
     /// Deletes a global command.
     pub async fn delete_global_command(&self, command_id: CommandId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::Command {
-                application_id: self.try_application_id()?,
-                command_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::Command { application_id: self.try_application_id()?, command_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
     /// Deletes a guild, only if connected account owns it.
     pub async fn delete_guild(&self, guild_id: GuildId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::Guild {
-                guild_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::Guild { guild_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1163,18 +1153,21 @@ impl Http {
         guild_id: GuildId,
         command_id: CommandId,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::GuildCommand {
-                application_id: self.try_application_id()?,
-                guild_id,
-                command_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::GuildCommand {
+                    application_id: self.try_application_id()?,
+                    guild_id,
+                    command_id,
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1185,17 +1178,17 @@ impl Http {
         integration_id: IntegrationId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildIntegration {
-                guild_id,
-                integration_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildIntegration { guild_id, integration_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1210,9 +1203,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Delete,
-            route: Route::Invite {
-                code,
-            },
+            route: Route::Invite { code },
             params: None,
         })
         .await
@@ -1225,17 +1216,17 @@ impl Http {
         message_id: MessageId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::ChannelMessage {
-                channel_id,
-                message_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::ChannelMessage { channel_id, message_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1246,16 +1237,17 @@ impl Http {
         map: &Value,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: Some(to_vec(map)?),
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Post,
-            route: Route::ChannelMessagesBulkDelete {
-                channel_id,
+        self.wind(
+            204,
+            Request {
+                body: Some(to_vec(map)?),
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Post,
+                route: Route::ChannelMessagesBulkDelete { channel_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1282,17 +1274,17 @@ impl Http {
         channel_id: ChannelId,
         message_id: MessageId,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::ChannelMessageReactions {
-                channel_id,
-                message_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::ChannelMessageReactions { channel_id, message_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1303,18 +1295,21 @@ impl Http {
         message_id: MessageId,
         reaction_type: &ReactionType,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::ChannelMessageReactionEmoji {
-                channel_id,
-                message_id,
-                reaction: &reaction_type.as_data(),
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::ChannelMessageReactionEmoji {
+                    channel_id,
+                    message_id,
+                    reaction: &reaction_type.as_data(),
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1323,17 +1318,20 @@ impl Http {
         &self,
         interaction_token: &str,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::WebhookOriginalInteractionResponse {
-                application_id: self.try_application_id()?,
-                token: interaction_token,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::WebhookOriginalInteractionResponse {
+                    application_id: self.try_application_id()?,
+                    token: interaction_token,
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1344,17 +1342,17 @@ impl Http {
         target_id: TargetId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::ChannelPermission {
-                channel_id,
-                target_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::ChannelPermission { channel_id, target_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1366,19 +1364,22 @@ impl Http {
         user_id: UserId,
         reaction_type: &ReactionType,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::ChannelMessageReaction {
-                channel_id,
-                message_id,
-                user_id,
-                reaction: &reaction_type.as_data(),
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::ChannelMessageReaction {
+                    channel_id,
+                    message_id,
+                    user_id,
+                    reaction: &reaction_type.as_data(),
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1389,18 +1390,21 @@ impl Http {
         message_id: MessageId,
         reaction_type: &ReactionType,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::ChannelMessageReactionMe {
-                channel_id,
-                message_id,
-                reaction: &reaction_type.as_data(),
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::ChannelMessageReactionMe {
+                    channel_id,
+                    message_id,
+                    reaction: &reaction_type.as_data(),
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1411,17 +1415,17 @@ impl Http {
         role_id: RoleId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildRole {
-                guild_id,
-                role_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildRole { guild_id, role_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1436,17 +1440,17 @@ impl Http {
         guild_id: GuildId,
         event_id: ScheduledEventId,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::GuildScheduledEvent {
-                guild_id,
-                event_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::GuildScheduledEvent { guild_id, event_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1459,34 +1463,37 @@ impl Http {
         sticker_id: StickerId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildSticker {
-                guild_id,
-                sticker_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildSticker { guild_id, sticker_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
     /// Deletes a currently active test entitlement. Discord will act as though the corresponding
     /// user/guild *no longer has* an entitlement to the corresponding SKU.
     pub async fn delete_test_entitlement(&self, entitlement_id: EntitlementId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::Entitlement {
-                application_id: self.try_application_id()?,
-                entitlement_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::Entitlement {
+                    application_id: self.try_application_id()?,
+                    entitlement_id,
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1514,16 +1521,17 @@ impl Http {
         webhook_id: WebhookId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::Webhook {
-                webhook_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::Webhook { webhook_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1554,17 +1562,17 @@ impl Http {
         token: &str,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::WebhookWithToken {
-                webhook_id,
-                token,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::WebhookWithToken { webhook_id, token },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1582,9 +1590,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::Channel {
-                channel_id,
-            },
+            route: Route::Channel { channel_id },
             params: None,
         })
         .await
@@ -1602,9 +1608,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::StageInstance {
-                channel_id,
-            },
+            route: Route::StageInstance { channel_id },
             params: None,
         })
         .await
@@ -1627,10 +1631,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::GuildEmoji {
-                guild_id,
-                emoji_id,
-            },
+            route: Route::GuildEmoji { guild_id, emoji_id },
             params: None,
         })
         .await
@@ -1651,10 +1652,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Patch,
-            route: Route::Emoji {
-                application_id: self.try_application_id()?,
-                emoji_id,
-            },
+            route: Route::Emoji { application_id: self.try_application_id()?, emoji_id },
             params: None,
         })
         .await
@@ -1740,10 +1738,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Patch,
-            route: Route::Command {
-                application_id: self.try_application_id()?,
-                command_id,
-            },
+            route: Route::Command { application_id: self.try_application_id()?, command_id },
             params: None,
         })
         .await
@@ -1763,9 +1758,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::Guild {
-                guild_id,
-            },
+            route: Route::Guild { guild_id },
             params: None,
         })
         .await
@@ -1835,16 +1828,17 @@ impl Http {
     ) -> Result<()> {
         let body = to_vec(value)?;
 
-        self.wind(204, Request {
-            body: Some(body),
-            multipart: None,
-            headers: None,
-            method: LightMethod::Patch,
-            route: Route::GuildChannels {
-                guild_id,
+        self.wind(
+            204,
+            Request {
+                body: Some(body),
+                multipart: None,
+                headers: None,
+                method: LightMethod::Patch,
+                route: Route::GuildChannels { guild_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -1867,9 +1861,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildMfa {
-                guild_id,
-            },
+            route: Route::GuildMfa { guild_id },
             params: None,
         })
         .await
@@ -1890,9 +1882,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::GuildWidget {
-                guild_id,
-            },
+            route: Route::GuildWidget { guild_id },
             params: None,
         })
         .await
@@ -1912,9 +1902,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::GuildWelcomeScreen {
-                guild_id,
-            },
+            route: Route::GuildWelcomeScreen { guild_id },
             params: None,
         })
         .await
@@ -1936,10 +1924,7 @@ impl Http {
                 multipart: None,
                 headers: audit_log_reason.map(reason_into_header),
                 method: LightMethod::Patch,
-                route: Route::GuildMember {
-                    guild_id,
-                    user_id,
-                },
+                route: Route::GuildMember { guild_id, user_id },
                 params: None,
             })
             .await?;
@@ -1966,10 +1951,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Patch,
-            route: Route::ChannelMessage {
-                channel_id,
-                message_id,
-            },
+            route: Route::ChannelMessage { channel_id, message_id },
             params: None,
         };
 
@@ -1999,10 +1981,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::ChannelMessageCrosspost {
-                channel_id,
-                message_id,
-            },
+            route: Route::ChannelMessageCrosspost { channel_id, message_id },
             params: None,
         })
         .await
@@ -2022,9 +2001,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::GuildMemberMe {
-                guild_id,
-            },
+            route: Route::GuildMemberMe { guild_id },
             params: None,
         })
         .await
@@ -2042,16 +2019,17 @@ impl Http {
         let map = json!({ "nick": new_nickname });
         let body = to_vec(&map)?;
 
-        self.wind(200, Request {
-            body: Some(body),
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Patch,
-            route: Route::GuildMemberMe {
-                guild_id,
+        self.wind(
+            200,
+            Request {
+                body: Some(body),
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Patch,
+                route: Route::GuildMemberMe { guild_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -2069,9 +2047,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::ChannelFollowNews {
-                channel_id: news_channel_id,
-            },
+            route: Route::ChannelFollowNews { channel_id: news_channel_id },
             params: None,
         })
         .await
@@ -2161,10 +2137,7 @@ impl Http {
                 multipart: None,
                 headers: audit_log_reason.map(reason_into_header),
                 method: LightMethod::Patch,
-                route: Route::GuildRole {
-                    guild_id,
-                    role_id,
-                },
+                route: Route::GuildRole { guild_id, role_id },
                 params: None,
             })
             .await?;
@@ -2196,9 +2169,7 @@ impl Http {
                 multipart: None,
                 headers: audit_log_reason.map(reason_into_header),
                 method: LightMethod::Patch,
-                route: Route::GuildRoles {
-                    guild_id,
-                },
+                route: Route::GuildRoles { guild_id },
                 params: None,
             })
             .await?;
@@ -2232,10 +2203,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::GuildScheduledEvent {
-                guild_id,
-                event_id,
-            },
+            route: Route::GuildScheduledEvent { guild_id, event_id },
             params: None,
         })
         .await
@@ -2259,10 +2227,7 @@ impl Http {
                 multipart: None,
                 headers: audit_log_reason.map(reason_into_header),
                 method: LightMethod::Patch,
-                route: Route::GuildSticker {
-                    guild_id,
-                    sticker_id,
-                },
+                route: Route::GuildSticker { guild_id, sticker_id },
                 params: None,
             })
             .await?;
@@ -2286,9 +2251,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::Channel {
-                channel_id,
-            },
+            route: Route::Channel { channel_id },
             params: None,
         })
         .await
@@ -2330,17 +2293,17 @@ impl Http {
         user_id: UserId,
         map: &impl serde::Serialize,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: Some(to_vec(map)?),
-            multipart: None,
-            headers: None,
-            method: LightMethod::Patch,
-            route: Route::GuildVoiceStates {
-                guild_id,
-                user_id,
+        self.wind(
+            204,
+            Request {
+                body: Some(to_vec(map)?),
+                multipart: None,
+                headers: None,
+                method: LightMethod::Patch,
+                route: Route::GuildVoiceStates { guild_id, user_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -2382,16 +2345,17 @@ impl Http {
         guild_id: GuildId,
         map: &impl serde::Serialize,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: Some(to_vec(map)?),
-            multipart: None,
-            headers: None,
-            method: LightMethod::Patch,
-            route: Route::GuildVoiceStateMe {
-                guild_id,
+        self.wind(
+            204,
+            Request {
+                body: Some(to_vec(map)?),
+                multipart: None,
+                headers: None,
+                method: LightMethod::Patch,
+                route: Route::GuildVoiceStateMe { guild_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -2404,16 +2368,17 @@ impl Http {
     ) -> Result<()> {
         let body = to_vec(map)?;
 
-        self.wind(204, Request {
-            body: Some(body),
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Put,
-            route: Route::ChannelVoiceStatus {
-                channel_id,
+        self.wind(
+            204,
+            Request {
+                body: Some(body),
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Put,
+                route: Route::ChannelVoiceStatus { channel_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -2460,9 +2425,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::Webhook {
-                webhook_id,
-            },
+            route: Route::Webhook { webhook_id },
             params: None,
         })
         .await
@@ -2507,10 +2470,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::WebhookWithToken {
-                webhook_id,
-                token,
-            },
+            route: Route::WebhookWithToken { webhook_id, token },
             params: None,
         })
         .await
@@ -2621,10 +2581,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::WebhookWithToken {
-                webhook_id,
-                token,
-            },
+            route: Route::WebhookWithToken { webhook_id, token },
             params: Some(params),
         };
 
@@ -2660,11 +2617,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::WebhookMessage {
-                webhook_id,
-                token,
-                message_id,
-            },
+            route: Route::WebhookMessage { webhook_id, token, message_id },
             params: thread_id.map(|thread_id| vec![("thread_id", thread_id.to_string())]),
         })
         .await
@@ -2685,11 +2638,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Patch,
-            route: Route::WebhookMessage {
-                webhook_id,
-                token,
-                message_id,
-            },
+            route: Route::WebhookMessage { webhook_id, token, message_id },
             params: thread_id.map(|thread_id| vec![("thread_id", thread_id.to_string())]),
         };
 
@@ -2714,18 +2663,17 @@ impl Http {
         token: &str,
         message_id: MessageId,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::WebhookMessage {
-                webhook_id,
-                token,
-                message_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::WebhookMessage { webhook_id, token, message_id },
+                params: thread_id.map(|thread_id| vec![("thread_id", thread_id.to_string())]),
             },
-            params: thread_id.map(|thread_id| vec![("thread_id", thread_id.to_string())]),
-        })
+        )
         .await
     }
 
@@ -2787,9 +2735,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildBans {
-                guild_id,
-            },
+            route: Route::GuildBans { guild_id },
             params: Some(params),
         })
         .await
@@ -2812,10 +2758,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildBan {
-                    guild_id,
-                    user_id,
-                },
+                route: Route::GuildBan { guild_id, user_id },
                 params: None,
             })
             .await;
@@ -2857,9 +2800,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildAuditLogs {
-                guild_id,
-            },
+            route: Route::GuildAuditLogs { guild_id },
             params: Some(params),
         })
         .await
@@ -2874,9 +2815,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildAutomodRules {
-                guild_id,
-            },
+            route: Route::GuildAutomodRules { guild_id },
             params: None,
         })
         .await
@@ -2891,10 +2830,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildAutomodRule {
-                guild_id,
-                rule_id,
-            },
+            route: Route::GuildAutomodRule { guild_id, rule_id },
             params: None,
         })
         .await
@@ -2916,9 +2852,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildAutomodRules {
-                guild_id,
-            },
+            route: Route::GuildAutomodRules { guild_id },
             params: None,
         })
         .await
@@ -2941,10 +2875,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::GuildAutomodRule {
-                guild_id,
-                rule_id,
-            },
+            route: Route::GuildAutomodRule { guild_id, rule_id },
             params: None,
         })
         .await
@@ -2959,17 +2890,17 @@ impl Http {
         rule_id: RuleId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildAutomodRule {
-                guild_id,
-                rule_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildAutomodRule { guild_id, rule_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -2993,9 +2924,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelInvites {
-                channel_id,
-            },
+            route: Route::ChannelInvites { channel_id },
             params: None,
         })
         .await
@@ -3011,9 +2940,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelThreadMembers {
-                channel_id,
-            },
+            route: Route::ChannelThreadMembers { channel_id },
             params: None,
         })
         .await
@@ -3026,9 +2953,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildThreadsActive {
-                guild_id,
-            },
+            route: Route::GuildThreadsActive { guild_id },
             params: None,
         })
         .await
@@ -3054,9 +2979,7 @@ impl Http {
             multipart: None,
             method: LightMethod::Get,
             headers: None,
-            route: Route::ChannelArchivedPublicThreads {
-                channel_id,
-            },
+            route: Route::ChannelArchivedPublicThreads { channel_id },
             params: Some(params),
         })
         .await
@@ -3082,9 +3005,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelArchivedPrivateThreads {
-                channel_id,
-            },
+            route: Route::ChannelArchivedPrivateThreads { channel_id },
             params: Some(params),
         })
         .await
@@ -3110,9 +3031,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelJoinedPrivateThreads {
-                channel_id,
-            },
+            route: Route::ChannelJoinedPrivateThreads { channel_id },
             params: Some(params),
         })
         .await
@@ -3120,31 +3039,33 @@ impl Http {
 
     /// Joins a thread channel.
     pub async fn join_thread_channel(&self, channel_id: ChannelId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Put,
-            route: Route::ChannelThreadMemberMe {
-                channel_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Put,
+                route: Route::ChannelThreadMemberMe { channel_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
     /// Leaves a thread channel.
     pub async fn leave_thread_channel(&self, channel_id: ChannelId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::ChannelThreadMemberMe {
-                channel_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::ChannelThreadMemberMe { channel_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -3154,17 +3075,17 @@ impl Http {
         channel_id: ChannelId,
         user_id: UserId,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Put,
-            route: Route::ChannelThreadMember {
-                channel_id,
-                user_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Put,
+                route: Route::ChannelThreadMember { channel_id, user_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -3174,17 +3095,17 @@ impl Http {
         channel_id: ChannelId,
         user_id: UserId,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::ChannelThreadMember {
-                channel_id,
-                user_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::ChannelThreadMember { channel_id, user_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -3199,10 +3120,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelThreadMember {
-                channel_id,
-                user_id,
-            },
+            route: Route::ChannelThreadMember { channel_id, user_id },
             params: Some(vec![("with_member", with_member.to_string())]),
         })
         .await
@@ -3234,9 +3152,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelWebhooks {
-                channel_id,
-            },
+            route: Route::ChannelWebhooks { channel_id },
             params: None,
         })
         .await
@@ -3249,9 +3165,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Channel {
-                channel_id,
-            },
+            route: Route::Channel { channel_id },
             params: None,
         })
         .await
@@ -3264,9 +3178,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildChannels {
-                guild_id,
-            },
+            route: Route::GuildChannels { guild_id },
             params: None,
         })
         .await
@@ -3279,9 +3191,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::StageInstance {
-                channel_id,
-            },
+            route: Route::StageInstance { channel_id },
             params: None,
         })
         .await
@@ -3316,11 +3226,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::ChannelPollGetAnswerVoters {
-                    channel_id,
-                    message_id,
-                    answer_id,
-                },
+                route: Route::ChannelPollGetAnswerVoters { channel_id, message_id, answer_id },
                 params: Some(params),
             })
             .await?;
@@ -3338,10 +3244,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::ChannelPollExpire {
-                channel_id,
-                message_id,
-            },
+            route: Route::ChannelPollExpire { channel_id, message_id },
             params: None,
         })
         .await
@@ -3382,9 +3285,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildEmojis {
-                guild_id,
-            },
+            route: Route::GuildEmojis { guild_id },
             params: None,
         })
         .await
@@ -3397,10 +3298,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildEmoji {
-                guild_id,
-                emoji_id,
-            },
+            route: Route::GuildEmoji { guild_id, emoji_id },
             params: None,
         })
         .await
@@ -3420,9 +3318,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::Emojis {
-                    application_id: self.try_application_id()?,
-                },
+                route: Route::Emojis { application_id: self.try_application_id()? },
                 params: None,
             })
             .await?;
@@ -3437,10 +3333,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Emoji {
-                application_id: self.try_application_id()?,
-                emoji_id,
-            },
+            route: Route::Emoji { application_id: self.try_application_id()?, emoji_id },
             params: None,
         })
         .await
@@ -3454,17 +3347,20 @@ impl Http {
     ///
     /// [`Consumable`]: SkuKind::Consumable
     pub async fn consume_entitlement(&self, entitlement_id: EntitlementId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Post,
-            route: Route::ConsumeEntitlement {
-                application_id: self.try_application_id()?,
-                entitlement_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Post,
+                route: Route::ConsumeEntitlement {
+                    application_id: self.try_application_id()?,
+                    entitlement_id,
+                },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -3511,9 +3407,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Entitlements {
-                application_id: self.try_application_id()?,
-            },
+            route: Route::Entitlements { application_id: self.try_application_id()? },
             params: Some(params),
         })
         .await
@@ -3539,9 +3433,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Commands {
-                application_id: self.try_application_id()?,
-            },
+            route: Route::Commands { application_id: self.try_application_id()? },
             params: None,
         })
         .await
@@ -3554,9 +3446,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Commands {
-                application_id: self.try_application_id()?,
-            },
+            route: Route::Commands { application_id: self.try_application_id()? },
             params: Some(vec![("with_localizations", true.to_string())]),
         })
         .await
@@ -3569,10 +3459,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Command {
-                application_id: self.try_application_id()?,
-                command_id,
-            },
+            route: Route::Command { application_id: self.try_application_id()?, command_id },
             params: None,
         })
         .await
@@ -3585,9 +3472,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Guild {
-                guild_id,
-            },
+            route: Route::Guild { guild_id },
             params: None,
         })
         .await
@@ -3600,9 +3485,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Guild {
-                guild_id,
-            },
+            route: Route::Guild { guild_id },
             params: Some(vec![("with_counts", true.to_string())]),
         })
         .await
@@ -3615,10 +3498,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildCommands {
-                application_id: self.try_application_id()?,
-                guild_id,
-            },
+            route: Route::GuildCommands { application_id: self.try_application_id()?, guild_id },
             params: None,
         })
         .await
@@ -3635,10 +3515,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildCommands {
-                application_id: self.try_application_id()?,
-                guild_id,
-            },
+            route: Route::GuildCommands { application_id: self.try_application_id()?, guild_id },
             params: Some(vec![("with_localizations", true.to_string())]),
         })
         .await
@@ -3714,9 +3591,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildWidget {
-                guild_id,
-            },
+            route: Route::GuildWidget { guild_id },
             params: None,
         })
         .await
@@ -3729,9 +3604,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildPreview {
-                guild_id,
-            },
+            route: Route::GuildPreview { guild_id },
             params: None,
         })
         .await
@@ -3744,9 +3617,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildWelcomeScreen {
-                guild_id,
-            },
+            route: Route::GuildWelcomeScreen { guild_id },
             params: None,
         })
         .await
@@ -3759,9 +3630,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildIntegrations {
-                guild_id,
-            },
+            route: Route::GuildIntegrations { guild_id },
             params: None,
         })
         .await
@@ -3774,9 +3643,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildInvites {
-                guild_id,
-            },
+            route: Route::GuildInvites { guild_id },
             params: None,
         })
         .await
@@ -3794,9 +3661,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildVanityUrl {
-                guild_id,
-            },
+            route: Route::GuildVanityUrl { guild_id },
             params: None,
         })
         .await
@@ -3829,9 +3694,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildMembers {
-                    guild_id,
-                },
+                route: Route::GuildMembers { guild_id },
                 params: Some(params),
             })
             .await?;
@@ -3854,9 +3717,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildPrune {
-                guild_id,
-            },
+            route: Route::GuildPrune { guild_id },
             params: Some(vec![("days", days.to_string())]),
         })
         .await
@@ -3870,9 +3731,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildRegions {
-                guild_id,
-            },
+            route: Route::GuildRegions { guild_id },
             params: None,
         })
         .await
@@ -3886,10 +3745,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildRole {
-                    guild_id,
-                    role_id,
-                },
+                route: Route::GuildRole { guild_id, role_id },
                 params: None,
             })
             .await?;
@@ -3912,9 +3768,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildRoleMemberCounts {
-                    guild_id,
-                },
+                route: Route::GuildRoleMemberCounts { guild_id },
                 params: None,
             })
             .await?;
@@ -3930,9 +3784,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildRoles {
-                    guild_id,
-                },
+                route: Route::GuildRoles { guild_id },
                 params: None,
             })
             .await?;
@@ -3964,10 +3816,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildScheduledEvent {
-                guild_id,
-                event_id,
-            },
+            route: Route::GuildScheduledEvent { guild_id, event_id },
             params: Some(vec![("with_user_count", with_user_count.to_string())]),
         })
         .await
@@ -3988,9 +3837,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildScheduledEvents {
-                guild_id,
-            },
+            route: Route::GuildScheduledEvents { guild_id },
             params: Some(vec![("with_user_count", with_user_count.to_string())]),
         })
         .await
@@ -4039,10 +3886,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildScheduledEventUsers {
-                guild_id,
-                event_id,
-            },
+            route: Route::GuildScheduledEventUsers { guild_id, event_id },
             params: Some(params),
         })
         .await
@@ -4056,9 +3900,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildStickers {
-                    guild_id,
-                },
+                route: Route::GuildStickers { guild_id },
                 params: None,
             })
             .await?;
@@ -4086,10 +3928,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildSticker {
-                    guild_id,
-                    sticker_id,
-                },
+                route: Route::GuildSticker { guild_id, sticker_id },
                 params: None,
             })
             .await?;
@@ -4127,9 +3966,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildWebhooks {
-                guild_id,
-            },
+            route: Route::GuildWebhooks { guild_id },
             params: None,
         })
         .await
@@ -4224,9 +4061,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::UserMeGuildMember {
-                    guild_id,
-                },
+                route: Route::UserMeGuildMember { guild_id },
                 params: None,
             })
             .await?;
@@ -4272,9 +4107,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Invite {
-                code,
-            },
+            route: Route::Invite { code },
             params: Some(params),
         })
         .await
@@ -4288,10 +4121,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildMember {
-                    guild_id,
-                    user_id,
-                },
+                route: Route::GuildMember { guild_id, user_id },
                 params: None,
             })
             .await?;
@@ -4314,10 +4144,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelMessage {
-                channel_id,
-                message_id,
-            },
+            route: Route::ChannelMessage { channel_id, message_id },
             params: None,
         })
         .await
@@ -4347,9 +4174,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelMessages {
-                channel_id,
-            },
+            route: Route::ChannelMessages { channel_id },
             params: Some(params),
         })
         .await
@@ -4362,9 +4187,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::StickerPack {
-                sticker_pack_id,
-            },
+            route: Route::StickerPack { sticker_pack_id },
             params: None,
         })
         .await
@@ -4396,9 +4219,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::ChannelPins {
-                channel_id,
-            },
+            route: Route::ChannelPins { channel_id },
             params: None,
         })
         .await
@@ -4439,9 +4260,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Skus {
-                application_id: self.try_application_id()?,
-            },
+            route: Route::Skus { application_id: self.try_application_id()? },
             params: None,
         })
         .await
@@ -4454,9 +4273,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Sticker {
-                sticker_id,
-            },
+            route: Route::Sticker { sticker_id },
             params: None,
         })
         .await
@@ -4517,9 +4334,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::User {
-                user_id,
-            },
+            route: Route::User { user_id },
             params: None,
         })
         .await
@@ -4580,10 +4395,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildVoiceStates {
-                guild_id,
-                user_id,
-            },
+            route: Route::GuildVoiceStates { guild_id, user_id },
             params: None,
         })
         .await
@@ -4615,9 +4427,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::Webhook {
-                webhook_id,
-            },
+            route: Route::Webhook { webhook_id },
             params: None,
         })
         .await
@@ -4654,10 +4464,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::WebhookWithToken {
-                webhook_id,
-                token,
-            },
+            route: Route::WebhookWithToken { webhook_id, token },
             params: None,
         })
         .await
@@ -4691,10 +4498,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::WebhookWithToken {
-                webhook_id,
-                token,
-            },
+            route: Route::WebhookWithToken { webhook_id, token },
             params: None,
         })
         .await
@@ -4707,32 +4511,33 @@ impl Http {
         user_id: UserId,
         reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildMember {
-                guild_id,
-                user_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildMember { guild_id, user_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
     /// Leaves a guild.
     pub async fn leave_guild(&self, guild_id: GuildId) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Delete,
-            route: Route::UserMeGuild {
-                guild_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Delete,
+                route: Route::UserMeGuild { guild_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -4752,9 +4557,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Post,
-            route: Route::ChannelMessages {
-                channel_id,
-            },
+            route: Route::ChannelMessages { channel_id },
             params: None,
         };
 
@@ -4778,17 +4581,17 @@ impl Http {
         message_id: MessageId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Put,
-            route: Route::ChannelPin {
-                channel_id,
-                message_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Put,
+                route: Route::ChannelPin { channel_id, message_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -4799,17 +4602,17 @@ impl Http {
         user_id: UserId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildBan {
-                guild_id,
-                user_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildBan { guild_id, user_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -4825,18 +4628,17 @@ impl Http {
         role_id: RoleId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildMemberRole {
-                guild_id,
-                user_id,
-                role_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildMemberRole { guild_id, user_id, role_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -4854,9 +4656,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildMembersSearch {
-                    guild_id,
-                },
+                route: Route::GuildMembersSearch { guild_id },
                 params: Some(vec![
                     ("query", query.to_string()),
                     ("limit", limit.unwrap_or(constants::MEMBER_FETCH_LIMIT).to_string()),
@@ -4887,9 +4687,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildPrune {
-                guild_id,
-            },
+            route: Route::GuildPrune { guild_id },
             params: Some(vec![("days", days.to_string())]),
         })
         .await
@@ -4901,17 +4699,17 @@ impl Http {
         guild_id: GuildId,
         integration_id: IntegrationId,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: None,
-            method: LightMethod::Post,
-            route: Route::GuildIntegrationSync {
-                guild_id,
-                integration_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: None,
+                method: LightMethod::Post,
+                route: Route::GuildIntegrationSync { guild_id, integration_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -4930,9 +4728,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Put,
-            route: Route::GuildIncidentActions {
-                guild_id,
-            },
+            route: Route::GuildIncidentActions { guild_id },
             params: None,
         })
         .await
@@ -4985,17 +4781,17 @@ impl Http {
         message_id: MessageId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::ChannelPin {
-                channel_id,
-                message_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::ChannelPin { channel_id, message_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -5005,16 +4801,17 @@ impl Http {
         channel_id: ChannelId,
         map: &impl serde::Serialize,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: Some(to_vec(map)?),
-            multipart: None,
-            headers: None,
-            method: LightMethod::Post,
-            route: Route::SoundboardSend {
-                channel_id,
+        self.wind(
+            204,
+            Request {
+                body: Some(to_vec(map)?),
+                multipart: None,
+                headers: None,
+                method: LightMethod::Post,
+                route: Route::SoundboardSend { channel_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 
@@ -5044,9 +4841,7 @@ impl Http {
                 multipart: None,
                 headers: None,
                 method: LightMethod::Get,
-                route: Route::GuildSoundboards {
-                    guild_id,
-                },
+                route: Route::GuildSoundboards { guild_id },
                 params: None,
             })
             .await?;
@@ -5065,10 +4860,7 @@ impl Http {
             multipart: None,
             headers: None,
             method: LightMethod::Get,
-            route: Route::GuildSoundboard {
-                guild_id,
-                sound_id,
-            },
+            route: Route::GuildSoundboard { guild_id, sound_id },
             params: None,
         })
         .await
@@ -5086,9 +4878,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Post,
-            route: Route::GuildSoundboards {
-                guild_id,
-            },
+            route: Route::GuildSoundboards { guild_id },
             params: None,
         })
         .await
@@ -5107,10 +4897,7 @@ impl Http {
             multipart: None,
             headers: audit_log_reason.map(reason_into_header),
             method: LightMethod::Patch,
-            route: Route::GuildSoundboard {
-                guild_id,
-                sound_id,
-            },
+            route: Route::GuildSoundboard { guild_id, sound_id },
             params: None,
         })
         .await
@@ -5123,17 +4910,17 @@ impl Http {
         sound_id: SoundId,
         audit_log_reason: Option<&str>,
     ) -> Result<()> {
-        self.wind(204, Request {
-            body: None,
-            multipart: None,
-            headers: audit_log_reason.map(reason_into_header),
-            method: LightMethod::Delete,
-            route: Route::GuildSoundboard {
-                guild_id,
-                sound_id,
+        self.wind(
+            204,
+            Request {
+                body: None,
+                multipart: None,
+                headers: audit_log_reason.map(reason_into_header),
+                method: LightMethod::Delete,
+                route: Route::GuildSoundboard { guild_id, sound_id },
+                params: None,
             },
-            params: None,
-        })
+        )
         .await
     }
 

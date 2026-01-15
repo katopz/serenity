@@ -5,4 +5,6 @@ pub mod prelude;
 
 pub mod sync;
 
+pub mod http_client;
+
 pub mod tokio;

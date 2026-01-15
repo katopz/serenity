@@ -29,8 +29,8 @@ mod typing;
 
 use std::sync::Arc;
 
-use reqwest::Method;
-pub use reqwest::StatusCode;
+use crate::internal::http_client::Method;
+pub use crate::internal::http_client::StatusCode;
 
 pub use self::client::*;
 pub use self::error::*;
