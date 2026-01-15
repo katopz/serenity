@@ -1,0 +1,13 @@
+[package]
+name = "wasm_rest_api"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+serenity = { path = "../../", default-features = false, features = ["model", "http", "builder", "utils", "wasm"] }
+worker = "0.4.2"
+serde_json = "1.0.108"
+
+[lib]
+crate-type = ["cdylib", "rlib"]

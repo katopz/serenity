@@ -11,6 +11,12 @@ compile_error!(
     If you are unsure, go with `rustls_backend`."
 );
 
+#[cfg(all(target_arch = "wasm32", feature = "multipart"))]
+compile_error!(
+    "Multipart file uploads are not supported in WASM builds. \
+    Use text/JSON payloads only, or deploy to a native platform for file upload support."
+);
+
 fn main() {
     println!("cargo:rustc-check-cfg=cfg(tokio_unstable, ignore_serenity_deprecated)");
 }

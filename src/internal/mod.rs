@@ -7,4 +7,6 @@ pub mod sync;
 
 pub mod http_client;
 
+pub mod config;
+
 pub mod tokio;

@@ -1,0 +1,52 @@
+name = "wasm-rest-api"
+main = "build/wasm_bg.js"
+compatibility_date = "2024-01-01"
+
+# Build configuration
+# This tells wrangler to use wasm-pack for building the Rust project
+[build]
+command = "wasm-pack build --dev --target web --out-dir build"
+
+# Environment variables
+# These should be set via wrangler secret or in a separate env var file
+# Never commit actual tokens to version control
+[vars]
+# DISCORD_TOKEN = ""  # Use `wrangler secret put DISCORD_TOKEN` instead
+# CHANNEL_ID = ""     # Optional: default channel for sending messages
+
+# Development configuration
+[env.dev]
+name = "wasm-rest-api-dev"
+# You can override variables for development environment
+# [env.dev.vars]
+# CHANNEL_ID = "123456789"  # Development channel ID
+
+# Production configuration
+[env.production]
+name = "wasm-rest-api-prod"
+
+# Routes configuration (uncomment and customize as needed)
+# routes = [
+#   { pattern = "https://your-domain.com/*", zone_name = "your-domain.com" }
+# ]
+
+# KV Namespaces (optional - for caching or persistence)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "your-namespace-id"
+
+# D1 Databases (optional - for SQL database access)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "your-database-name"
+# database_id = "your-database-id"
+
+# R2 Buckets (optional - for file storage)
+# [[r2_buckets]]
+# binding = "STORAGE"
+# bucket_name = "your-bucket-name"
+
+# Services (optional - for other Workers integration)
+# [[services]]
+# binding = "OTHER_WORKER"
+# service = "other-worker-name"
